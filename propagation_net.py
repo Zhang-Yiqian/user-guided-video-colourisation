@@ -1,38 +1,27 @@
 from __future__ import division
 import torch
 from torch.autograd import Variable
-from torch.nn import Parameter
-from torch.utils import data
 
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
-import torch.utils.model_zoo as model_zoo
 from torchvision import models
 
 # general libs
-import cv2
-import matplotlib.pyplot as plt
-from PIL import Image
 import numpy as np
 import math
-import time
-import os
-import argparse
-import copy
-import sys
+from utils import ToCudaVariable
 
-from utils import ToCudaVariable, load_UnDP
-
-print('Propagation Network: initialized')
-# 
+print('Propagation Network: initialising')
 
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.conv1_m = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=True)
-        self.conv1_x = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        
+        # [ab values, binary mask]
+        self.conv1_strokes = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # previous round frame
+        self.conv1_prev = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+
+        # initialisation methods in Oh's paper
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -41,16 +30,17 @@ class Encoder(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+        # extract ResNet layers
         resnet = models.resnet50(pretrained=True)
         self.conv1 = resnet.conv1
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
 
-        self.res2 = resnet.layer1 # 1/4, 256
-        self.res3 = resnet.layer2 # 1/8, 512
-        self.res4 = resnet.layer3 # 1/16, 1024
-        self.res5 = resnet.layer4 # 1/32, 2048
+        self.res2 = resnet.layer1  # 1/4, 256
+        self.res3 = resnet.layer2  # 1/8, 512
+        self.res4 = resnet.layer3  # 1/16, 1024
+        self.res5 = resnet.layer4  # 1/32, 2048
 
         # freeze BNs
         for m in self.modules():
@@ -76,7 +66,6 @@ class Encoder(nn.Module):
         r5 = self.res5(r4) # 1/32, 512
 
         return r5, r4, r3, r2
-
 
 class ResBlock(nn.Module):
     def __init__(self, indim, outdim=None):
@@ -260,8 +249,11 @@ class Pnet(nn.Module):
             
         return ToCudaVariable([torch.from_numpy(np_yxhw.copy()).float()])[0]
 
+    def forward(self):
+        tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tx_roi)
 
-    def forward(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
+
+    def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
         # if first target frame (no tb)
         if tm is None:
             tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
@@ -300,7 +292,6 @@ class Pnet(nn.Module):
                     gm_roi_s = torch.round(F.upsample(torch.unsqueeze(gm_roi, dim=1), size=sizes[s], mode='bilinear')[:,0]).long()
                     CE_s = CE(em_roi[s], gm_roi_s).mean(-1).mean(-1) # mean over h,w
                     batch_CE += loss_weight[s] * CE_s
-
 
         # get final output via inverse warping
         em = F.grid_sample(F.softmax(em_roi[0], dim=1), bw_grid)[:,1]

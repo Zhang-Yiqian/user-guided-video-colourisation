@@ -21,7 +21,7 @@ import argparse
 import copy
 import sys
 
-from utils import ToCudaVariable, load_UnDP
+from utils import ToCudaVariable
 
 print('Interaction Network: initialized')
 
@@ -29,10 +29,12 @@ print('Interaction Network: initialized')
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.conv1_m = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=True)
-        self.conv1_p = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.conv1_n = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        
+        # [ab values, binary mask]
+        self.conv1_strokes = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # previous round frame
+        self.conv1_prev = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+
+        # initialisation methods in Oh's paper
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -47,10 +49,10 @@ class Encoder(nn.Module):
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
 
-        self.res2 = resnet.layer1 # 1/4, 256
-        self.res3 = resnet.layer2 # 1/8, 512
-        self.res4 = resnet.layer3 # 1/16, 1024
-        self.res5 = resnet.layer4 # 1/32, 2048
+        self.res2 = resnet.layer1  # 1/4, 256
+        self.res3 = resnet.layer2  # 1/8, 512
+        self.res4 = resnet.layer3  # 1/16, 1024
+        self.res5 = resnet.layer4  # 1/32, 2048
 
         # freeze BNs
         for m in self.modules():
@@ -61,20 +63,19 @@ class Encoder(nn.Module):
         self.register_buffer('mean', torch.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))
         self.register_buffer('std', torch.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1))
 
-    def forward(self, in_f, in_m, in_p, in_n):
-        f = (in_f - Variable(self.mean)) / Variable(self.std)
-        m = torch.unsqueeze(in_m, dim=1).float() # add channel dim
-        p = torch.unsqueeze(in_p, dim=1).float() # add channel dim
-        n = torch.unsqueeze(in_n, dim=1).float() # add channel dim
+    def forward(self, in_frame, in_strokes, in_prev):
+        f = (in_frame - Variable(self.mean)) / Variable(self.std)
+        s = torch.unsqueeze(in_strokes, dim=1).float()  # add channel dim
+        p = torch.unsqueeze(in_prev, dim=1).float()  # add channel dim
 
-        x = self.conv1(f) + self.conv1_m(m) + self.conv1_p(p) + self.conv1_n(n)
+        x = self.conv1(f) + self.conv1_strokes(s) + self.conv1_prev(p)
         x = self.bn1(x)
-        c1 = self.relu(x)   # 1/2, 64
+        c1 = self.relu(x)     # 1/2, 64
         x = self.maxpool(c1)  # 1/4, 64
-        r2 = self.res2(x)   # 1/4, 64
-        r3 = self.res3(r2) # 1/8, 128
-        r4 = self.res4(r3) # 1/16, 256
-        r5 = self.res5(r4) # 1/32, 512
+        r2 = self.res2(x)     # 1/4, 64
+        r3 = self.res3(r2)    # 1/8, 128
+        r4 = self.res4(r3)    # 1/16, 256
+        r5 = self.res5(r4)    # 1/32, 512
 
         return r5, r4, r3, r2
 
@@ -120,9 +121,9 @@ class Decoder(nn.Module):
     def __init__(self, mdim):
         super(Decoder, self).__init__()
         self.ResFM = ResBlock(2048, mdim)
-        self.RF4 = Refine(1024, mdim) # 1/16 -> 1/8
-        self.RF3 = Refine(512, mdim) # 1/8 -> 1/4
-        self.RF2 = Refine(256, mdim) # 1/4 -> 1
+        self.RF4 = Refine(1024, mdim)  # 1/16 -> 1/8
+        self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
+        self.RF2 = Refine(256, mdim)   # 1/4 -> 1
 
         self.pred5 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.pred4 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
@@ -131,15 +132,15 @@ class Decoder(nn.Module):
 
     def forward(self, r5, r4, r3, r2):
         m5 = self.ResFM(r5)
-        m4 = self.RF4(r4, m5) # out: 1/16, 256
-        m3 = self.RF3(r3, m4) # out: 1/8, 256
-        m2 = self.RF2(r2, m3) # out: 1/4, 256
+        m4 = self.RF4(r4, m5)  # out: 1/16, 256
+        m3 = self.RF3(r3, m4)  # out: 1/8, 256
+        m2 = self.RF2(r2, m3)  # out: 1/4, 256
 
         p2 = self.pred2(F.relu(m2))
         p3 = self.pred3(F.relu(m3))
         p4 = self.pred4(F.relu(m4))
         p5 = self.pred5(F.relu(m5))
-        
+
         p = F.upsample(p2, scale_factor=4, mode='bilinear')
         
         return p, p2, p3, p4, p5

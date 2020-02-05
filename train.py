@@ -16,7 +16,14 @@ davis = '~/Documents/dataset/DAVIS/JPEGImages/480p/scooter-gray/'
 
 # initialize the model
 frames = load_frames(davis)
+
+
+
+
 model = model(frames)
+
+
+
 
 
 
