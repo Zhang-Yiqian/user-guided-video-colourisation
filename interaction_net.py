@@ -19,8 +19,10 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         # [ab values, binary mask]
         self.conv1_strokes = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
-        # previous round frame
-        self.conv1_prev = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # previous round frame, ab space
+        self.conv1_prev = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # grayscale frame
+        self.conv1_gray = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=True)
 
         # initialisation methods in Oh's paper
         for m in self.modules():
@@ -48,15 +50,21 @@ class Encoder(nn.Module):
                 for p in m.parameters():
                     p.requires_grad = False
 
+        ###############################
+        ############ rewrite ##########
+        ###############################
         self.register_buffer('mean', torch.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))
         self.register_buffer('std', torch.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1))
+        ###############################
+        ############ rewrite ##########
+        ###############################
 
-    def forward(self, in_frame, in_strokes, in_prev):
-        f = (in_frame - Variable(self.mean)) / Variable(self.std)
+    def forward(self, in_gray, in_strokes, in_prev):
+        f = (in_gray - Variable(self.mean)) / Variable(self.std)
         s = torch.unsqueeze(in_strokes, dim=1).float()  # add channel dim
         p = torch.unsqueeze(in_prev, dim=1).float()  # add channel dim
 
-        x = self.conv1(f) + self.conv1_strokes(s) + self.conv1_prev(p)
+        x = self.conv1_gray(f) + self.conv1_strokes(s) + self.conv1_prev(p)
         x = self.bn1(x)
         c1 = self.relu(x)     # 1/2, 64
         x = self.maxpool(c1)  # 1/4, 64
@@ -142,7 +150,7 @@ class Inet(nn.Module):
         self.Decoder = Decoder(mdim)  # input: m5, r4, r3, r2 >> p
         self.cnt = 0
 
-    def is_there_scribble(self, p, n ):
+    def is_there_scribble(self, p, n):
         num_pixel_p = np.sum(p.data.cpu().numpy(), axis=(1,2))
         num_pixel_n = np.sum(n.data.cpu().numpy(), axis=(1,2))
         num_pixel = num_pixel_p + num_pixel_n
@@ -153,9 +161,9 @@ class Inet(nn.Module):
 
     def forward(self, in_frame, in_strokes, in_prev):
         tr5, tr4, tr3, tr2 = self.Encoder(in_frame, in_strokes, in_prev)
-        em = self.Decoder(tr5, tr4, tr3, tr2)
+        em_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
-        return em, tr5
+        return em_ab
 
     def forward1(self, tf, tm, tp, tn, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
         if tm is None:

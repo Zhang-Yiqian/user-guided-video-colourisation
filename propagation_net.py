@@ -16,10 +16,12 @@ print('Propagation Network: initialising')
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        # [ab values, binary mask]
-        self.conv1_strokes = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # gray scale
+        self.conv1_gray = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=True)
         # previous round frame
-        self.conv1_prev = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        self.conv1_prev_r = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        # previous time frame
+        self.conv1_prev_t = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=True)
 
         # initialisation methods in Oh's paper
         for m in self.modules():
@@ -47,16 +49,22 @@ class Encoder(nn.Module):
             if isinstance(m, nn.BatchNorm2d):
                 for p in m.parameters():
                     p.requires_grad = False
-
+        ###############################
+        ############ rewrite ##########
+        ###############################
         self.register_buffer('mean', torch.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))
         self.register_buffer('std', torch.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1))
+        ###############################
+        ############ rewrite ##########
+        ###############################
 
-    def forward(self, in_f, in_m, in_x):
-        f = (in_f - Variable(self.mean)) / Variable(self.std)
-        m = torch.unsqueeze(in_m, dim=1).float() # add channel dim
-        x = torch.unsqueeze(in_x, dim=1).float() # add channel dim
+    def forward(self, in_gray, in_frame_r, in_frame_t):
+        f = (in_gray - Variable(self.mean)) / Variable(self.std)
+        r = torch.unsqueeze(in_frame_r, dim=1).float()  # add channel dim
+        t = torch.unsqueeze(in_frame_t, dim=1).float()  # add channel dim
 
-        x = self.conv1(f) + self.conv1_m(m) + self.conv1_x(x) 
+        # x = self.conv1(f) + self.conv1_m(m) + self.conv1_x(x)
+        x = self.conv1_gray(f) + self.conv1_prev_r(r) + self.conv1_prev_t(t)
         x = self.bn1(x)
         c1 = self.relu(x)   # 1/2, 64
         x = self.maxpool(c1)  # 1/4, 64
@@ -165,92 +173,13 @@ class Pnet(nn.Module):
         self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
         self.cnt = 0
 
-    def get_ROI_grid(self, roi, src_size, dst_size, scale=1.):
-        # scale height and width
-        ry, rx, rh, rw = roi[:,0], roi[:,1], scale * roi[:,2], scale * roi[:,3]
-        
-        # convert ti minmax  
-        ymin = ry - rh/2.
-        ymax = ry + rh/2.
-        xmin = rx - rw/2.
-        xmax = rx + rw/2.
-        
-        h, w = src_size[0], src_size[1] 
-        # theta
-        theta = ToCudaVariable([torch.zeros(roi.size()[0],2,3)])[0]
-        theta[:,0,0] = (xmax - xmin) / (w - 1)
-        theta[:,0,2] = (xmin + xmax - (w - 1)) / (w - 1)
-        theta[:,1,1] = (ymax - ymin) / (h - 1)
-        theta[:,1,2] = (ymin + ymax - (h - 1)) / (h - 1)
-
-        #inverse of theta
-        inv_theta = ToCudaVariable([torch.zeros(roi.size()[0],2,3)])[0]
-        det = theta[:,0,0]*theta[:,1,1]
-        adj_x = -theta[:,0,2]*theta[:,1,1]
-        adj_y = -theta[:,0,0]*theta[:,1,2]
-        inv_theta[:,0,0] = w / (xmax - xmin) 
-        inv_theta[:,1,1] = h / (ymax - ymin) 
-        inv_theta[:,0,2] = adj_x / det
-        inv_theta[:,1,2] = adj_y / det
-        # make affine grid
-        fw_grid = F.affine_grid(theta, torch.Size((roi.size()[0], 1, dst_size[0], dst_size[1])))
-        bw_grid = F.affine_grid(inv_theta, torch.Size((roi.size()[0], 1, src_size[0], src_size[1])))
-        return fw_grid, bw_grid, theta
-
-    def masks2yxhw(self, mask1, mask2, scale=1.0):
-        np_mask1 = mask1.data.cpu().numpy()
-        np_mask2 = mask2.data.cpu().numpy()
-        np_yxhw = np.zeros((np_mask1.shape[0], 4), dtype=np.float32)
-        for b in range(np_mask1.shape[0]):
-            ys1, xs1  = np.where(np_mask1[b] >= 0.49)
-            ys2, xs2  = np.where(np_mask2[b] >= 0.49)
-            all_ys = np.concatenate([ys1,ys2])
-            all_xs = np.concatenate([xs1,xs2])
-
-            if all_ys.size == 0 or all_xs.size == 0:
-                # if no pixel, return whole
-                ymin, ymax = 0, np_mask1.shape[1]
-                xmin, xmax = 0, np_mask1.shape[2]
-            else:
-                ymin, ymax = np.min(all_ys), np.max(all_ys)
-                xmin, xmax = np.min(all_xs), np.max(all_xs)
-
-            # make sure minimum 128 original size
-            if (ymax-ymin) < 128:
-                res = 128. - (ymax-ymin)
-                ymin -= int(res/2)
-                ymax += int(res/2)
-
-            if (xmax-xmin) < 128:
-                res = 128. - (xmax-xmin)
-                xmin -= int(res/2)
-                xmax += int(res/2)
-
-            # apply scale
-            # y = (ymax + ymin) / 2.
-            # x = (xmax + xmin) / 2.
-            orig_h = ymax - ymin + 1
-            orig_w = xmax - xmin + 1
-
-            ymin = np.maximum(-5, ymin - (scale - 1) / 2. * orig_h)  
-            ymax = np.minimum(np_mask1.shape[1]+5, ymax + (scale - 1) / 2. * orig_h)    
-            xmin = np.maximum(-5, xmin - (scale - 1) / 2. * orig_w)  
-            xmax = np.minimum(np_mask1.shape[2]+5, xmax + (scale - 1) / 2. * orig_w)  
-
-            # final ywhw
-            y = (ymax + ymin) / 2.
-            x = (xmax + xmin) / 2.
-            h = ymax - ymin + 1
-            w = xmax - xmin + 1
-
-            yxhw = np.array([y,x,h,w], dtype=np.float32)
-            
-            np_yxhw[b] = yxhw
-            
-        return ToCudaVariable([torch.from_numpy(np_yxhw.copy()).float()])[0]
-
-    def forward(self):
-        tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tx_roi)
+    def forward(self, in_gray, in_frame_r, in_frame_t):
+        tr5, tr4, tr3, tr2 = self.Encoder(in_gray, in_frame_r, in_frame_t)
+        if p_ref is None:
+            a_ref = c_ref.detach()
+        else:
+            a_ref = self.SEFA(c_ref.detach(), p_ref.detach())
+        em_ab = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
 
 
     def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)

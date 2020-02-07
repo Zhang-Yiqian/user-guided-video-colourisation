@@ -73,7 +73,7 @@ class model():
 
     def forward(self):
 
-
+        pass
 
     def Prop_forward(self, target, end):
         for n in range(target+1, end+1):  #[1,2,...,N-1]
