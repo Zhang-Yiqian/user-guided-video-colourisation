@@ -1,26 +1,14 @@
 from __future__ import division
 import torch
 from torch.autograd import Variable
-from torch.utils import data
 
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
-import torch.utils.model_zoo as model_zoo
 from torchvision import models
 
 # general libs
-import cv2
-import matplotlib.pyplot as plt
-from PIL import Image
 import numpy as np
 import math
-import time
-import os
-import argparse
-import copy
-import sys
-
 from utils import ToCudaVariable
 
 print('Interaction Network: initialized')
@@ -93,7 +81,6 @@ class ResBlock(nn.Module):
         self.conv1 = nn.Conv2d(indim, outdim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(outdim, outdim, kernel_size=3, padding=1)
 
-
     def forward(self, x):
         r = self.conv1(F.relu(x))
         r = self.conv2(F.relu(r))
@@ -116,6 +103,7 @@ class Refine(nn.Module):
         m = s + F.upsample(pm, scale_factor=self.scale_factor, mode='bilinear')
         m = self.ResMM(m)
         return m
+
 
 class Decoder(nn.Module):
     def __init__(self, mdim):
@@ -146,103 +134,13 @@ class Decoder(nn.Module):
         return p, p2, p3, p4, p5
 
 
-
 class Inet(nn.Module):
     def __init__(self):
         super(Inet, self).__init__()
         mdim = 256
-        self.Encoder = Encoder() # inputs:: ref: rf, rm / tar: tf, tm 
-        self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
+        self.Encoder = Encoder()      # inputs: ref: rf, rm / tar: tf, tm
+        self.Decoder = Decoder(mdim)  # input: m5, r4, r3, r2 >> p
         self.cnt = 0
-
-    def get_ROI_grid(self, roi, src_size, dst_size, scale=1.):
-        # scale height and width
-        ry, rx, rh, rw = roi[:,0], roi[:,1], scale * roi[:,2], scale * roi[:,3]
-        
-        # convert ti minmax  
-        ymin = ry - rh/2.
-        ymax = ry + rh/2.
-        xmin = rx - rw/2.
-        xmax = rx + rw/2.
-        
-        h, w = src_size[0], src_size[1] 
-        # theta
-        theta = ToCudaVariable([torch.zeros(roi.size()[0],2,3)])[0]
-        theta[:,0,0] = (xmax - xmin) / (w - 1)
-        theta[:,0,2] = (xmin + xmax - (w - 1)) / (w - 1)
-        theta[:,1,1] = (ymax - ymin) / (h - 1)
-        theta[:,1,2] = (ymin + ymax - (h - 1)) / (h - 1)
-
-        #inverse of theta
-        inv_theta = ToCudaVariable([torch.zeros(roi.size()[0],2,3)])[0]
-        det = theta[:,0,0]*theta[:,1,1]
-        adj_x = -theta[:,0,2]*theta[:,1,1]
-        adj_y = -theta[:,0,0]*theta[:,1,2]
-        inv_theta[:,0,0] = w / (xmax - xmin) 
-        inv_theta[:,1,1] = h / (ymax - ymin) 
-        inv_theta[:,0,2] = adj_x / det
-        inv_theta[:,1,2] = adj_y / det
-        # make affine grid
-        fw_grid = F.affine_grid(theta, torch.Size((roi.size()[0], 1, dst_size[0], dst_size[1])))
-        bw_grid = F.affine_grid(inv_theta, torch.Size((roi.size()[0], 1, src_size[0], src_size[1])))
-        return fw_grid, bw_grid, theta
-
-
-    def all2yxhw(self, mask, pos, neg, scale=1.0):
-        np_mask = mask.data.cpu().numpy()
-        np_pos = pos.data.cpu().numpy()
-        np_neg = neg.data.cpu().numpy()
-
-        np_yxhw = np.zeros((np_mask.shape[0], 4), dtype=np.float32)
-        for b in range(np_mask.shape[0]):
-            mys, mxs = np.where(np_mask[b] >= 0.49)
-            pys, pxs = np.where(np_pos[b] >= 0.49)
-            nys, nxs = np.where(np_neg[b] >= 0.49)
-            all_ys = np.concatenate([mys,pys,nys])
-            all_xs = np.concatenate([mxs,pxs,nxs])
-
-            if all_ys.size == 0 or all_xs.size == 0:
-                # if no pixel, return whole
-                ymin, ymax = 0, np_mask.shape[1]
-                xmin, xmax = 0, np_mask.shape[2]
-            else:
-                ymin, ymax = np.min(all_ys), np.max(all_ys)
-                xmin, xmax = np.min(all_xs), np.max(all_xs)
-
-            # make sure minimum 128 original size
-            if (ymax-ymin) < 128:
-                res = 128. - (ymax-ymin)
-                ymin -= int(res/2)
-                ymax += int(res/2)
-
-            if (xmax-xmin) < 128:
-                res = 128. - (xmax-xmin)
-                xmin -= int(res/2)
-                xmax += int(res/2)
-
-            # apply scale
-            # y = (ymax + ymin) / 2.
-            # x = (xmax + xmin) / 2.
-            orig_h = ymax - ymin + 1
-            orig_w = xmax - xmin + 1
-
-            ymin = np.maximum(-5, ymin - (scale - 1) / 2. * orig_h)  
-            ymax = np.minimum(np_mask.shape[1]+5, ymax + (scale - 1) / 2. * orig_h)    
-            xmin = np.maximum(-5, xmin - (scale - 1) / 2. * orig_w)  
-            xmax = np.minimum(np_mask.shape[2]+5, xmax + (scale - 1) / 2. * orig_w)  
-
-            # final ywhw
-            y = (ymax + ymin) / 2.
-            x = (xmax + xmin) / 2.
-            h = ymax - ymin + 1
-            w = xmax - xmin + 1
-
-            yxhw = np.array([y,x,h,w], dtype=np.float32)
-            
-            np_yxhw[b] = yxhw
-            
-        return ToCudaVariable([torch.from_numpy(np_yxhw.copy()).float()])[0]
-
 
     def is_there_scribble(self, p, n ):
         num_pixel_p = np.sum(p.data.cpu().numpy(), axis=(1,2))
@@ -253,25 +151,22 @@ class Inet(nn.Module):
         yes = yes * mulplier
         return ToCudaVariable([torch.from_numpy(yes.copy()).float()])[0]
 
-    def forward(self, tf, tm, tp, tn, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
-        if tm is None:
-            tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
-        tb = self.all2yxhw(tm, tp, tn, scale=1.5)
-        
-        oh, ow = tf.size()[2], tf.size()[3] # original size
-        fw_grid, bw_grid, theta = self.get_ROI_grid(tb, src_size=(oh, ow), dst_size=(256,256), scale=1.0)
+    def forward(self, in_frame, in_strokes, in_prev):
+        tr5, tr4, tr3, tr2 = self.Encoder(in_frame, in_strokes, in_prev)
+        em = self.Decoder(tr5, tr4, tr3, tr2)
 
-        #  Sample target frame
-        tf_roi = F.grid_sample(tf, fw_grid)
-        tm_roi = F.grid_sample(torch.unsqueeze(tm, dim=1).float(), fw_grid)[:,0]
-        tp_roi = F.grid_sample(torch.unsqueeze(tp, dim=1).float(), fw_grid)[:,0]
-        tn_roi = F.grid_sample(torch.unsqueeze(tn, dim=1).float(), fw_grid)[:,0]
+        return em, tr5
+
+    def forward1(self, tf, tm, tp, tn, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
+        if tm is None:
+            # tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
+            pass
 
         # run Siamese Encoder
         tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tp_roi, tn_roi)
         em_roi = self.Decoder(tr5, tr4, tr3, tr2)
 
-        ## Losses are computed within ROI
+        # Losses are computed within ROI
         # CE loss
         gm_roi = F.grid_sample(torch.unsqueeze(gm, dim=1).float(), fw_grid)[:,0]
         gm_roi = gm_roi.detach()
