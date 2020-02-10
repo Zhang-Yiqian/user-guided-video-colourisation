@@ -173,14 +173,18 @@ class Pnet(nn.Module):
         self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
         self.cnt = 0
 
-    def forward(self, in_gray, in_frame_r, in_frame_t):
+    def forward(self, in_gray, in_frame_r, in_frame_t, p_ref=None):
         tr5, tr4, tr3, tr2 = self.Encoder(in_gray, in_frame_r, in_frame_t)
+
+        # c_ref is tr5
         if p_ref is None:
-            a_ref = c_ref.detach()
+            a_ref = tr5.detach()
         else:
-            a_ref = self.SEFA(c_ref.detach(), p_ref.detach())
+            a_ref = self.SEFA(tr5.detach(), p_ref.detach())
+
         em_ab = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
 
+        return em_ab
 
     def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
         # if first target frame (no tb)
@@ -204,7 +208,7 @@ class Pnet(nn.Module):
             a_ref = self.SEFA(c_ref.detach(), p_ref.detach())
         em_roi = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
 
-        ## Losses are computed within ROI
+        # Losses are computed within ROI
         # CE loss
         gm_roi = F.grid_sample(torch.unsqueeze(gm, dim=1).float(), fw_grid)[:,0]
         gm_roi = gm_roi.detach()

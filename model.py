@@ -91,7 +91,7 @@ class model():
         self.prev_E = self.all_E  
 
         if mode == 'naive':
-            left_end, right_end, weight = 0, self.num_frames-1, num_frames*[1.0]
+            left_end, right_end, weight = 0, self.num_frames-1, self.num_frames*[1.0]
         elif mode == 'linear':
             left_end, right_end, weight = Get_weight(target, self.prev_targets, self.num_frames, at_least=at_least)
         else:
@@ -101,7 +101,7 @@ class model():
         self.Prop_backward(target, left_end)
 
         for f in range(self.num_frames):
-            self.all_E[:,:,f] = weight[f] * self.all_E[:,:,f] + (1-weight[f]) * self.prev_E[:,:,f]
+            self.all_E[:, :, f] = weight[f] * self.all_E[:,:,f] + (1-weight[f]) * self.prev_E[:,:,f]
 
         self.prev_targets.append(target)
         print('[MODEL] Propagation finished.')    

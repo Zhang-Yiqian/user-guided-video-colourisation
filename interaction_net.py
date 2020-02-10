@@ -191,11 +191,13 @@ class Inet(nn.Module):
                     gm_roi_s = torch.round(F.upsample(torch.unsqueeze(gm_roi, dim=1), size=sizes[s], mode='bilinear')[:,0]).long()
                     CE_s = CE(em_roi[s], gm_roi_s).mean(-1).mean(-1) # mean over h,w
                     batch_CE += loss_weight[s] * CE_s
-
         batch_CE = batch_CE * self.is_there_scribble(tp, tn)
-
 
         # get final output via inverse warping
         em = F.grid_sample(F.softmax(em_roi[0], dim=1), bw_grid)[:,1]
         # return em, batch_CE, [tr5, tr4, tr3, tr2]
         return em, batch_CE, tr5
+
+
+
+
