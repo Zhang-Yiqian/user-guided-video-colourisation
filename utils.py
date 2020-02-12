@@ -7,18 +7,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 import torch.utils.model_zoo as model_zoo
-from torchvision import models
 
 # general libs
-import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import os
-import copy
 import cv2
-import random
 import glob
-
+from skimage import io, color
 
 
 def ToCudaVariable(xs, volatile=False, requires_grad=False):
@@ -90,18 +86,23 @@ def To_np_label(all_E, K, index):
     return fgs.astype(np.uint8)
 
 def load_frames(path, size=None, num_frames=None):
-    fnames = glob.glob(os.path.join(path, '*.jpg')) 
+    fnames = glob.glob(os.path.join(path, '*')) 
     fnames.sort()
-    frame_list = []
+    frames_list = []
+    frames_gray = []
     for i, fname in enumerate(fnames):
+        frame = color.rgb2lab(io.imread(fname)) / 255.0
+        # frame = np.array(Image.open(fname).convert('LAB')) / 255.0
         if size:
-            frame_list.append(np.array(Image.open(fname).convert('RGB').resize((size[0], size[1]), Image.BICUBIC), dtype=np.uint8))
+            frames_list.append(frame.resize((size[0], size[1]), Image.BICUBIC)) 
+            frames_gray.append(frame[:, :, 0].resize((size[0], size[1]), Image.BICUBIC))
         else:
-            frame_list.append(np.array(Image.open(fname).convert('RGB'), dtype=np.uint8))
-        if num_frames and i > num_frames:
-            break
-    frames = np.stack(frame_list, axis=0)
-    return frames
+            frames_list.append(frame)
+            frames_gray.append(frame[:, :, 0])
+    frames = np.stack(frames_list, axis=0)
+    frames_gray = np.stack(frames_gray, axis=0)
+    
+    return frames, frames_gray
 
 def load_UnDP(path):
     # load dataparallel wrapped model properly

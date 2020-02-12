@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from torchvision import models
 
 # general libs
-import numpy as np
 import math
 from utils import ToCudaVariable
 
@@ -34,7 +33,6 @@ class Encoder(nn.Module):
 
         # extract ResNet layers
         resnet = models.resnet50(pretrained=True)
-        self.conv1 = resnet.conv1
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
@@ -63,7 +61,6 @@ class Encoder(nn.Module):
         r = torch.unsqueeze(in_frame_r, dim=1).float()  # add channel dim
         t = torch.unsqueeze(in_frame_t, dim=1).float()  # add channel dim
 
-        # x = self.conv1(f) + self.conv1_m(m) + self.conv1_x(x)
         x = self.conv1_gray(f) + self.conv1_prev_r(r) + self.conv1_prev_t(t)
         x = self.bn1(x)
         c1 = self.relu(x)   # 1/2, 64
@@ -128,11 +125,11 @@ class Decoder(nn.Module):
 
     def forward(self, rr5, r5, r4, r3, r2):
         m5 = torch.cat([rr5, r5], dim=1)
-        m5 = self.ResFM1(m5)
-        m5 = self.ResFM2(m5)
-        m4 = self.RF4(r4, m5) # out: 1/16, 256
-        m3 = self.RF3(r3, m4) # out: 1/8, 256
-        m2 = self.RF2(r2, m3) # out: 1/4, 256
+        m5 = self.ResFM1(m5)   
+        m5 = self.ResFM2(m5)   
+        m4 = self.RF4(r4, m5)  # out: 1/16, 256
+        m3 = self.RF3(r3, m4)  # out: 1/8, 256
+        m2 = self.RF2(r2, m3)  # out: 1/4, 256
 
         p2 = self.pred2(F.relu(m2))
         p3 = self.pred3(F.relu(m3))
@@ -186,46 +183,46 @@ class Pnet(nn.Module):
 
         return em_ab
 
-    def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
-        # if first target frame (no tb)
-        if tm is None:
-            tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
-        tb = self.masks2yxhw(tm, tx, scale=1.5)
+    # def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
+    #     # if first target frame (no tb)
+    #     if tm is None:
+    #         tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
+    #     tb = self.masks2yxhw(tm, tx, scale=1.5)
 
-        oh, ow = tf.size()[2], tf.size()[3] # original size
-        fw_grid, bw_grid, theta = self.get_ROI_grid(tb, src_size=(oh, ow), dst_size=(256,256), scale=1.0)
+    #     oh, ow = tf.size()[2], tf.size()[3] # original size
+    #     fw_grid, bw_grid, theta = self.get_ROI_grid(tb, src_size=(oh, ow), dst_size=(256,256), scale=1.0)
 
-        #  Sample target frame
-        tf_roi = F.grid_sample(tf, fw_grid)
-        tm_roi = F.grid_sample(torch.unsqueeze(tm, dim=1).float(), fw_grid)[:,0]
-        tx_roi = F.grid_sample(torch.unsqueeze(tx, dim=1).float(), fw_grid)[:,0]
+    #     #  Sample target frame
+    #     tf_roi = F.grid_sample(tf, fw_grid)
+    #     tm_roi = F.grid_sample(torch.unsqueeze(tm, dim=1).float(), fw_grid)[:,0]
+    #     tx_roi = F.grid_sample(torch.unsqueeze(tx, dim=1).float(), fw_grid)[:,0]
 
-        # run Siamese Encoder
-        tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tx_roi)
-        if p_ref is None:
-            a_ref = c_ref.detach()
-        else:
-            a_ref = self.SEFA(c_ref.detach(), p_ref.detach())
-        em_roi = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
+    #     # run Siamese Encoder
+    #     tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tx_roi)
+    #     if p_ref is None:
+    #         a_ref = c_ref.detach()
+    #     else:
+    #         a_ref = self.SEFA(c_ref.detach(), p_ref.detach())
+    #     em_roi = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
 
-        # Losses are computed within ROI
-        # CE loss
-        gm_roi = F.grid_sample(torch.unsqueeze(gm, dim=1).float(), fw_grid)[:,0]
-        gm_roi = gm_roi.detach()
-        # CE loss
-        CE = nn.CrossEntropyLoss(reduce=False)
-        batch_CE = ToCudaVariable([torch.zeros(gm_roi.size()[0])])[0] # batch sized loss container 
-        sizes=[(256,256), (64,64), (32,32), (16,16), (8,8)]
-        for s in range(5):
-            if s == 0:
-                CE_s = CE(em_roi[s], torch.round(gm_roi).long()).mean(-1).mean(-1) # mean over h,w
-                batch_CE += loss_weight[s] * CE_s
-            else:
-                if loss_weight[s]:
-                    gm_roi_s = torch.round(F.upsample(torch.unsqueeze(gm_roi, dim=1), size=sizes[s], mode='bilinear')[:,0]).long()
-                    CE_s = CE(em_roi[s], gm_roi_s).mean(-1).mean(-1) # mean over h,w
-                    batch_CE += loss_weight[s] * CE_s
+    #     # Losses are computed within ROI
+    #     # CE loss
+    #     gm_roi = F.grid_sample(torch.unsqueeze(gm, dim=1).float(), fw_grid)[:,0]
+    #     gm_roi = gm_roi.detach()
+    #     # CE loss
+    #     CE = nn.CrossEntropyLoss(reduce=False)
+    #     batch_CE = ToCudaVariable([torch.zeros(gm_roi.size()[0])])[0] # batch sized loss container 
+    #     sizes=[(256,256), (64,64), (32,32), (16,16), (8,8)]
+    #     for s in range(5):
+    #         if s == 0:
+    #             CE_s = CE(em_roi[s], torch.round(gm_roi).long()).mean(-1).mean(-1) # mean over h,w
+    #             batch_CE += loss_weight[s] * CE_s
+    #         else:
+    #             if loss_weight[s]:
+    #                 gm_roi_s = torch.round(F.upsample(torch.unsqueeze(gm_roi, dim=1), size=sizes[s], mode='bilinear')[:,0]).long()
+    #                 CE_s = CE(em_roi[s], gm_roi_s).mean(-1).mean(-1) # mean over h,w
+    #                 batch_CE += loss_weight[s] * CE_s
 
-        # get final output via inverse warping
-        em = F.grid_sample(F.softmax(em_roi[0], dim=1), bw_grid)[:,1]
-        return em, batch_CE, a_ref
+    #     # get final output via inverse warping
+    #     em = F.grid_sample(F.softmax(em_roi[0], dim=1), bw_grid)[:,1]
+    #     return em, batch_CE, a_ref
