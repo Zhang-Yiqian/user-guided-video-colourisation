@@ -36,7 +36,6 @@ class Encoder(nn.Module):
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
-
         self.res2 = resnet.layer1  # 1/4, 256
         self.res3 = resnet.layer2  # 1/8, 512
         self.res4 = resnet.layer3  # 1/16, 1024
@@ -47,19 +46,12 @@ class Encoder(nn.Module):
             if isinstance(m, nn.BatchNorm2d):
                 for p in m.parameters():
                     p.requires_grad = False
-        ###############################
-        ############ rewrite ##########
-        ###############################
-        self.register_buffer('mean', torch.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))
-        self.register_buffer('std', torch.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1))
-        ###############################
-        ############ rewrite ##########
-        ###############################
 
     def forward(self, in_gray, in_frame_r, in_frame_t):
-        f = (in_gray - Variable(self.mean)) / Variable(self.std)
-        r = torch.unsqueeze(in_frame_r, dim=1).float()  # add channel dim
-        t = torch.unsqueeze(in_frame_t, dim=1).float()  # add channel dim
+        # f = (in_gray - Variable(self.mean)) / Variable(self.std)
+        f = torch.unsqueeze(in_gray, dim=0).float()  # 1*c*h*w
+        r = torch.unsqueeze(in_frame_r, dim=0).float()
+        t = torch.unsqueeze(in_frame_t, dim=0).float()
 
         x = self.conv1_gray(f) + self.conv1_prev_r(r) + self.conv1_prev_t(t)
         x = self.bn1(x)
@@ -180,10 +172,9 @@ class Pnet(nn.Module):
             a_ref = self.SEFA(tr5.detach(), fam_ref.detach())
         em_ab = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
         # how to estimate the pixel value ---- softmax? or .....
-        
-        em_pic = [in_gray; em_ab]
+
         CE = nn.CrossEntropyLoss(reduce=False)
-        loss = CE(em_pic, gt)
+        loss = CE(em_ab, gt)
         return em_ab, loss
 
     # def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)

@@ -1,7 +1,7 @@
 from __future__ import division
 import torch
 from torch.autograd import Variable
-from torch.utils import data
+from torch import from_numpy
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,6 +15,7 @@ import os
 import cv2
 import glob
 from skimage import io, color
+from skimage.transform import resize
 
 
 def ToCudaVariable(xs, volatile=False, requires_grad=False):
@@ -85,24 +86,20 @@ def To_np_label(all_E, K, index):
     fgs = np.argmax(E, axis=0)
     return fgs.astype(np.uint8)
 
-def load_frames(path, size=None, num_frames=None):
+def load_frames(path, size=(256, 256), num_frames=None):
     fnames = glob.glob(os.path.join(path, '*')) 
     fnames.sort()
     frames_list = []
     frames_gray = []
     for i, fname in enumerate(fnames):
         frame = color.rgb2lab(io.imread(fname)) / 255.0
-        # frame = np.array(Image.open(fname).convert('LAB')) / 255.0
-        if size:
-            frames_list.append(frame.resize((size[0], size[1]), Image.BICUBIC)) 
-            frames_gray.append(frame[:, :, 0].resize((size[0], size[1]), Image.BICUBIC))
-        else:
-            frames_list.append(frame)
-            frames_gray.append(frame[:, :, 0])
+        frame = resize(frame, size)
+        frames_list.append(frame.transpose((2, 0, 1))) 
+        frames_gray.append(frame[np.newaxis, :, :, 0])
     frames = np.stack(frames_list, axis=0)
     frames_gray = np.stack(frames_gray, axis=0)
     
-    return frames, frames_gray
+    return from_numpy(frames), from_numpy(frames_gray)
 
 def load_UnDP(path):
     # load dataparallel wrapped model properly
@@ -114,7 +111,6 @@ def load_UnDP(path):
         name = k[7:] # remove `module.`
         new_state_dict[name] = v
     return new_state_dict
-
 
 
 def overlay_davis(image,mask,rgb=[255,0,0],cscale=2,alpha=0.5):
