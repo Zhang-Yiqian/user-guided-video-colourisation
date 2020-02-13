@@ -142,7 +142,7 @@ class Decoder(nn.Module):
 
 
 class SEFA(nn.Module):
-    # Sequeeze-Expectation Feature Aggregation
+    # Sequeeze-Expectation Feature Aggregation 
     def __init__(self, inplanes, r=4):
         super(SEFA, self).__init__()
         self.inplanes = inplanes
@@ -170,18 +170,21 @@ class Pnet(nn.Module):
         self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
         self.cnt = 0
 
-    def forward(self, in_gray, in_frame_r, in_frame_t, p_ref=None):
+    def forward(self, in_gray, in_frame_r, in_frame_t, gt, fam_ref=None):
         tr5, tr4, tr3, tr2 = self.Encoder(in_gray, in_frame_r, in_frame_t)
 
         # c_ref is tr5
-        if p_ref is None:
+        if fam_ref is None:
             a_ref = tr5.detach()
         else:
-            a_ref = self.SEFA(tr5.detach(), p_ref.detach())
-
+            a_ref = self.SEFA(tr5.detach(), fam_ref.detach())
         em_ab = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
-
-        return em_ab
+        # how to estimate the pixel value ---- softmax? or .....
+        
+        em_pic = [in_gray; em_ab]
+        CE = nn.CrossEntropyLoss(reduce=False)
+        loss = CE(em_pic, gt)
+        return em_ab, loss
 
     # def forward1(self, c_ref, p_ref, tf, tm, tx, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
     #     # if first target frame (no tb)

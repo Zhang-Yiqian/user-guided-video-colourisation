@@ -16,7 +16,7 @@ davis = r'/home/yiqian/Documents/dataset/DAVIS/JPEGImages/480p/scooter-gray'
 
 # initialize the model
 frames, frames_gray = load_frames(path=davis)
-model = model(frames)
+model = model(frames, frames_gray)
 model.run_propagation(target=0, mode='naive', at_least=-1)
 
 
