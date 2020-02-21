@@ -63,7 +63,7 @@ plt.figure()
 skeleton = skeletonize(seg_img, method='lee')
 imshow(skeleton)
 plt.figure()
-imshow(out2 + np.tile(skeleton, 2, axis=0))
+imshow(out2)
 
 
 

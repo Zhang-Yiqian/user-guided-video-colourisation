@@ -51,7 +51,7 @@ class Encoder(nn.Module):
         # f = (in_gray - Variable(self.mean)) / Variable(self.std)
         f = torch.unsqueeze(in_gray, dim=0).float()  # 1*c*h*w
         r = torch.unsqueeze(in_frame_r, dim=0).float()
-        t = torch.unsqueeze(in_frame_t, dim=0).float()
+        t = torch.unsqueeze(in_frame_t, dim=0)
 
         x = self.conv1_gray(f) + self.conv1_prev_r(r) + self.conv1_prev_t(t)
         x = self.bn1(x)
