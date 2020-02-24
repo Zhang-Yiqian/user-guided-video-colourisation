@@ -39,14 +39,14 @@ scribbles = np.zeros([I.shape[0], I.shape[1]])
 plt.figure()
 for i in range(len(anns)):
     mask = coco.annToMask(anns[i])
-    skel = skeletonize(mask) * 1.0
-    dst = sfr.gradient(skel, disk(5))
-    scribbles += (dst > 0.5) * 1.0
+    scribbles += skeletonize(mask) * 1.0
+    # dst = sfr.gradient(skel, disk(5))
+    # scribbles += (dst > 0.5) * 1.0
     # scribbles += skel
     # scribbles += morphology.opening(skel, kernel) 
 
 plt.figure()
-imshow((scribbles> 0.5) * 1.0)
+imshow(scribbles)
 
 
 
