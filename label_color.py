@@ -15,7 +15,7 @@ from skimage.io import imshow, imread
 img = imread('test.jpg')
 # img = data.coffee()
 
-labels1 = segmentation.slic(img, compactness=30, n_segments=400)
+labels1 = segmentation.slic(img, compactness=20, n_segments=600)
 out1 = color.label2rgb(labels1, img, kind='avg')
 
 g = graph.rag_mean_color(img, labels1, mode='similarity')
@@ -32,3 +32,11 @@ for a in ax:
     a.axis('off')
 
 plt.tight_layout()
+
+
+
+
+
+
+
+

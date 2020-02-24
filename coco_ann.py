@@ -9,12 +9,10 @@ from cocoapi.PythonAPI.pycocotools.coco import COCO
 import numpy as np
 from skimage.io import imread, imshow, imsave
 import matplotlib.pyplot as plt
-import pylab
 from skimage.morphology import skeletonize, thin, medial_axis
 from skimage import morphology
-from skimage import filters
-import skimage.filters.rank as sfr
-from skimage.morphology import disk
+from skimage import draw
+
 
 annFile = '/home/yiqian/Documents/dataset/COCO/annotations_valstuff/stuff_val2017.json'
 coco=COCO(annFile)
@@ -32,21 +30,31 @@ anns = coco.loadAnns(annIds)
 
 # sample scribble areas based on uniform distribution
 # sample_number = np.random.randint(1, len(anns)+1)
-sample_number = 4
-area_list = np.random.permutation(len(anns)+1)[0 : sample_number+1]
+sample_area_num = 4
+
+area_list = np.random.permutation(len(anns)+1)[0 : sample_area_num+1]
 kernel = morphology.square(5)
 scribbles = np.zeros([I.shape[0], I.shape[1]])
 plt.figure()
 for i in range(len(anns)):
     mask = coco.annToMask(anns[i])
-    skel = skeletonize(mask) * 1.0
-    dst = sfr.gradient(skel, disk(5))
-    scribbles += (dst > 0.5) * 1.0
-    # scribbles += skel
-    # scribbles += morphology.opening(skel, kernel) 
-
+    # 1-D random sample
+    flat_mask = mask.reshape([1, -1])
+    index = np.arange(0, len(flat_mask))
+    # keep those pixels that are in the target area
+    index_mask = np.multiply(flat_mask, index)
+    index_mask = index_mask[index_mask != 0]
+    l = np.random.choice(index_mask, 3)
+    # convert to 2D coordinates
+    X = np.divide(l, I.shape[1]) + 1
+    Y = np.remainder(l, I.shape[1])
+    # plot bezier curve
+    rr, cc = draw.bezier_curve(X[0], Y[0], X[1], Y[1], X[2], Y[2], weight=0.5, \
+                      shape=(I.shape[0], I.shape[1]))
+    scribbles[rr, cc] = 1
+    
 plt.figure()
-imshow((scribbles> 0.5) * 1.0)
+imshow(scribbles)
 
 
 
