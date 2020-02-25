@@ -6,10 +6,11 @@ Created on Sat Feb 22 16:58:58 2020
 """
 from cocoapi.PythonAPI.pycocotools.coco import COCO
 import numpy as np
-from skimage.io import imread, imshow
+from skimage.io import imread, imshow, imsave
 import matplotlib.pyplot as plt
 from skimage import draw
 import random
+import cv2 as cv
 
 
 annFile = '/home/yiqian/Documents/dataset/COCO/annotations_valstuff/stuff_val2017.json'
@@ -58,18 +59,22 @@ for i in area_list:
     
     scribbles = np.add(scribbles, area_scribbles)
 
-    # draw.set_color(mask, [rr, cc], 1)
-    # r, c = draw.circle(X[0], Y[0], 5)
-    # draw.set_color(mask, [r, c], 1)
-    # r, c = draw.circle(X[1], Y[1], 5)
-    # draw.set_color(mask, [r, c], 1)
-    # r, c = draw.circle(X[2], Y[2], 5)
-    # draw.set_color(mask, [r, c], 1)
-    # i  = np.multiply(I, (1 - scribbles)) + scribbles
 
+dst = cv.pyrMeanShiftFiltering(I, 25, 30, termcrit=(cv.TERM_CRITERIA_MAX_ITER+ \
+                                                      cv.TERM_CRITERIA_EPS, 5, 1))
+plt.figure()
+imshow(dst)
+# extend matrix dimensions
+scribbles = np.expand_dims(scribbles, axis=2)
+scribbles = np.repeat(scribbles, 3, axis=2)
+coloured_scribbles = np.multiply(dst, scribbles).astype(np.int32)
 plt.figure()
 imshow(scribbles)
+plt.figure()
+imshow(coloured_scribbles)
 
+imsave('colourd_scribbles.jpg', coloured_scribbles)
+imsave('scribbles.jpg', scribbles)
 
 
 
