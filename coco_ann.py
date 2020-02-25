@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from skimage import draw
 import random
 import cv2 as cv
+import time
 
 
 annFile = '/home/yiqian/Documents/dataset/COCO/annotations_valstuff/stuff_val2017.json'
@@ -34,6 +35,7 @@ sample_area_num = 10
 area_list = np.random.permutation(len(anns))[0 : sample_area_num]
 scribbles = np.zeros([I.shape[0], I.shape[1]])
 
+start = time.clock()
 for i in area_list:
     area_scribbles = np.zeros([I.shape[0], I.shape[1]])
     mask = coco.annToMask(anns[i])
@@ -59,22 +61,38 @@ for i in area_list:
     
     scribbles = np.add(scribbles, area_scribbles)
 
-
+start_ = time.clock()
 dst = cv.pyrMeanShiftFiltering(I, 25, 30, termcrit=(cv.TERM_CRITERIA_MAX_ITER+ \
                                                       cv.TERM_CRITERIA_EPS, 5, 1))
-plt.figure()
-imshow(dst)
+end = time.clock()
+print("Filtering time used: ", end-start_)
+
 # extend matrix dimensions
 scribbles = np.expand_dims(scribbles, axis=2)
 scribbles = np.repeat(scribbles, 3, axis=2)
 coloured_scribbles = np.multiply(dst, scribbles).astype(np.int32)
+
+elapsed = (time.clock() - start)
+print("Time used: ", elapsed)
+
+plt.figure()
+imshow(dst)
 plt.figure()
 imshow(scribbles)
 plt.figure()
 imshow(coloured_scribbles)
 
-imsave('colourd_scribbles.jpg', coloured_scribbles)
-imsave('scribbles.jpg', scribbles)
+cv.imwrite("colourd_scribbles.tif", coloured_scribbles)
+cv.imwrite("scribbles.tif", np.multiply(scribbles, 255).astype(np.int32))
+
+# tif = TIFF.open("colourd_scribbles.tif", mode='w') 
+# tif.write_image(coloured_scribbles, compression=None)
+# tif.close()
+
+# tif = TIFF.open("scribbles.tif", mode='w') 
+# tif.write_image(scribbles, compression=None)
+# tif.close()
+
 
 
 
