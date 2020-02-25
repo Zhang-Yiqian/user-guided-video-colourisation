@@ -17,8 +17,8 @@ coco=COCO(annFile)
 imgIds = coco.getImgIds()
 img = coco.loadImgs(imgIds[0])[0]
 I = imread(img['coco_url'])       
-# plt.figure()
-# imshow(I)
+plt.figure()
+imshow(I)
 # catIds = coco.getCatIds(catNms=['person']);
 annIds = coco.getAnnIds(imgIds=img['id'], catIds=coco.getCatIds(), iscrowd=False)
 # annIds = coco.getAnnIds(imgIds=img['id'], catIds=catIds, iscrowd=False)
