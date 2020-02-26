@@ -6,7 +6,7 @@ import numpy as np
 import copy
 
 # my libs
-from utils import ToCudaVariable, ToCudaPN, Dilate_mask, load_UnDP, Get_weight, overlay_davis, overlay_checker, overlay_color, overlay_fade
+from utils.utils import ToCudaVariable, ToCudaPN, Dilate_mask, Get_weight
 from interaction_net import Inet
 from propagation_net import Pnet
 

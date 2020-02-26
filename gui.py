@@ -1,10 +1,9 @@
 import sys
 from PyQt5.QtWidgets import (QWidget, QApplication, QMainWindow, QComboBox, QDialog,
-        QDialogButtonBox, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
-        QLabel, QLineEdit, QMenu, QMenuBar, QPushButton, QSpinBox, QTextEdit,
-        QVBoxLayout, QMessageBox, QAction, QInputDialog, QColorDialog, QSizePolicy, QSlider, QLCDNumber, QSpinBox)
+                             QDialogButtonBox, QGridLayout, QGroupBox, QHBoxLayout,
+                             QLabel, QLineEdit, QMenu, QMenuBar, QPushButton, QSpinBox, QTextEdit,
+                             QVBoxLayout, QAction, QColorDialog, QSizePolicy, QSlider, QLCDNumber, QSpinBox)
 
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtCore import pyqtSlot, QTimer
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
@@ -21,12 +20,11 @@ from PIL import Image
 import numpy as np
 import math
 import time
-import os
 import copy
 import random
 
 from model import model
-from utils import load_frames, overlay_davis, overlay_checker, overlay_color, overlay_fade
+from utils.utils import load_frames, overlay_davis, overlay_checker, overlay_color, overlay_fade
 
 class App(QWidget):
     def __init__(self, sequence):

@@ -3,7 +3,7 @@ from model import model
 # from torch.backends import cudnn
 import numpy as np
 import random
-from utils import load_frames
+from utils.utils import load_frames
 
 # random seed initialisation
 manualSeed = 2020
