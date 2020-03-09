@@ -10,6 +10,7 @@ from torchvision import models
 import numpy as np
 import math
 from utils.utils import ToCudaVariable
+from torch import optim
 
 print('Interaction Network: initialized')
 
@@ -48,15 +49,6 @@ class Encoder(nn.Module):
             if isinstance(m, nn.BatchNorm2d):
                 for p in m.parameters():
                     p.requires_grad = False
-
-        ###############################
-        ############ rewrite ##########
-        ###############################
-        self.register_buffer('mean', torch.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))
-        self.register_buffer('std', torch.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1))
-        ###############################
-        ############ rewrite ##########
-        ###############################
 
     def forward(self, in_gray, in_strokes, in_prev):
         f = (in_gray - Variable(self.mean)) / Variable(self.std)
@@ -142,21 +134,14 @@ class Decoder(nn.Module):
 
 
 class Inet(nn.Module):
-    def __init__(self):
+    def __init__(self, opt):
         super(Inet, self).__init__()
         mdim = 256
         self.Encoder = Encoder()      # inputs: ref: rf, rm / tar: tf, tm
         self.Decoder = Decoder(mdim)  # input: m5, r4, r3, r2 >> p
-        self.cnt = 0
+        self.opt = opt
+        self.isTrain = opt.isTrain
 
-    def is_there_scribble(self, p, n):
-        num_pixel_p = np.sum(p.data.cpu().numpy(), axis=(1,2))
-        num_pixel_n = np.sum(n.data.cpu().numpy(), axis=(1,2))
-        num_pixel = num_pixel_p + num_pixel_n
-        yes = (num_pixel > 0).astype(np.float32)
-        mulplier = 1 / (np.mean(yes) + 0.001)
-        yes = yes * mulplier
-        return ToCudaVariable([torch.from_numpy(yes.copy()).float()])[0]
 
     def forward(self, in_frame, in_strokes, in_prev):
         tr5, tr4, tr3, tr2 = self.Encoder(in_frame, in_strokes, in_prev)
@@ -164,38 +149,56 @@ class Inet(nn.Module):
 
         return em_ab
 
-    # def forward1(self, tf, tm, tp, tn, gm, loss_weight):  # b,c,h,w // b,4 (y,x,h,w)
-    #     if tm is None:
-    #         # tm = ToCudaVariable([0.5*torch.ones(gm.size())], requires_grad=False)[0]
-    #         pass
+    # load and print networks; create schedulers
+    def setup(self, opt, parser=None):
+        if self.isTrain:
+            self.optimizer = optim.Adam(model.parameters(), lr = opt.lr, weight_decay = opt.weight_decay) 
 
-    #     # run Siamese Encoder
-    #     tr5, tr4, tr3, tr2 = self.Encoder(tf_roi, tm_roi, tp_roi, tn_roi)
-    #     em_roi = self.Decoder(tr5, tr4, tr3, tr2)
+        if not self.isTrain or opt.load_model:
+            self.load_networks(opt.which_epoch)
 
-    #     # Losses are computed within ROI
-    #     # CE loss
-    #     gm_roi = F.grid_sample(torch.unsqueeze(gm, dim=1).float(), fw_grid)[:,0]
-    #     gm_roi = gm_roi.detach()
-    #     # CE loss
-    #     CE = nn.CrossEntropyLoss(reduce=False)
-    #     batch_CE = ToCudaVariable([torch.zeros(gm_roi.size()[0])])[0] # batch sized loss container 
-    #     sizes=[(256,256), (64,64), (32,32), (16,16), (8,8)]
-    #     for s in range(5):
-    #         if s == 0:
-    #             CE_s = CE(em_roi[s], torch.round(gm_roi).long()).mean(-1).mean(-1) # mean over h,w
-    #             batch_CE += loss_weight[s] * CE_s
-    #         else:
-    #             if loss_weight[s]:
-    #                 gm_roi_s = torch.round(F.upsample(torch.unsqueeze(gm_roi, dim=1), size=sizes[s], mode='bilinear')[:,0]).long()
-    #                 CE_s = CE(em_roi[s], gm_roi_s).mean(-1).mean(-1) # mean over h,w
-    #                 batch_CE += loss_weight[s] * CE_s
-    #     batch_CE = batch_CE * self.is_there_scribble(tp, tn)
+    # not changed but might be used
+    def load_networks(self, which_epoch):
+        for name in self.model_names:
+            if isinstance(name, str):
+                load_filename = '%s_net_%s.pth' % (which_epoch, name)
+                load_path = os.path.join(self.save_dir, load_filename)
+                net = getattr(self, 'net' + name)
+                if isinstance(net, torch.nn.DataParallel):
+                    net = net.module
+                print('loading the model from %s' % load_path)
+                # if you are using PyTorch newer than 0.4 (e.g., built from
+                # GitHub source), you can remove str() on self.device
+                state_dict = torch.load(load_path, map_location=str(self.device))
+                if hasattr(state_dict, '_metadata'):
+                    del state_dict._metadata
 
-    #     # get final output via inverse warping
-    #     em = F.grid_sample(F.softmax(em_roi[0], dim=1), bw_grid)[:,1]
-    #     # return em, batch_CE, [tr5, tr4, tr3, tr2]
-    #     return em, batch_CE, tr5
+                # patch InstanceNorm checkpoints prior to 0.4
+                for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
+                    self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
+                net.load_state_dict(state_dict)
+
+    # print network information
+    def print_networks(self, verbose):
+        print('---------- Networks initialized -------------')
+        for name in self.model_names:
+            if isinstance(name, str):
+                net = getattr(self, 'net' + name)
+                num_params = 0
+                for param in net.parameters():
+                    num_params += param.numel()
+                if verbose:
+                    print(net)
+                print('[Network %s] Total number of parameters : %.3f M' % (name, num_params / 1e6))
+        print('-----------------------------------------------')
+
+
+
+
+
+
+
+
 
 
 

@@ -16,16 +16,11 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--beta1', type=float, default=0.9, help='momentum term of adam')
         parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate for adam')
         parser.add_argument('--no_lsgan', action='store_true', help='do *not* use least square GAN, if false, use vanilla GAN')
-        parser.add_argument('--lambda_GAN', type=float, default=0., help='weight for GAN loss')
-        parser.add_argument('--lambda_A', type=float, default=1., help='weight for cycle loss (A -> B -> A)')
-        parser.add_argument('--lambda_B', type=float, default=1., help='weight for cycle loss (B -> A -> B)')
-        parser.add_argument('--lambda_identity', type=float, default=0.5,
-                            help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss.'
-                            'For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
         parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
         parser.add_argument('--no_html', action='store_true', help='do not save intermediate training results to [opt.checkpoints_dir]/[opt.name]/web/')
         parser.add_argument('--lr_policy', type=str, default='lambda', help='learning rate policy: lambda|step|plateau')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
         parser.add_argument('--avg_loss_alpha', type=float, default=.986, help='exponential averaging weight for displaying loss')
+        parser.add_argument('--weight_decay', type = float, default=1e-4, help=‘weight_decay of adam optimizer’)
         self.isTrain = True
         return parser

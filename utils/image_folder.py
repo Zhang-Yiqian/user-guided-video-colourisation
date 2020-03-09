@@ -30,8 +30,7 @@ def is_image_file(filename):
 
 
 def default_loader(path):
-    img = Image.open(path).convert('RGB')
-    return rgb2lab(img)
+    return Image.open(path).convert('RGB')
 
 
 class ImageFolder(data.Dataset):
@@ -51,17 +50,20 @@ class ImageFolder(data.Dataset):
         self.loader = loader
 
     def __getitem__(self, index):
-        path = self.imgs[index]
+        path = self.root + self.imgs[index]
         img = self.loader(path)
         if self.transform is not None:
             img = self.transform(img)
-        # if self.return_paths:
-        #     return img, path
-        # else:
-        #     return img
+
         if self.return_paths:
             return img, path
         else:
             return img
+
     def __len__(self):
         return len(self.imgs)
+
+
+
+
+        

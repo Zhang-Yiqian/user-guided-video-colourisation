@@ -36,7 +36,7 @@ if __name__ == '__main__':
     model.setup(opt)
     model.print_networks(True)
 
-    visualizer = Visualizer(opt)
+    # visualizer = Visualizer(opt)
     total_steps = 0
 
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay):
@@ -55,7 +55,7 @@ if __name__ == '__main__':
             if total_steps % opt.print_freq == 0:
                 # time to load data
                 t_data = iter_start_time - iter_data_time
-            visualizer.reset()
+            # visualizer.reset()
             total_steps += opt.batch_size
             epoch_iter += opt.batch_size
             model.set_input(data)

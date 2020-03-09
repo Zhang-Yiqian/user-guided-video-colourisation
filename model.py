@@ -67,7 +67,7 @@ class model():
             print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
             self.res[n, :, :, :], loss = self.model_P(self.frames_gray[n, :, :], self.res[n, :, :, :], self.res[n+1, :, :, :])
             self.optimizer_p.zero_grad() 
-            loss.backward()  
+            loss.backward() 
             self.optimizer_p.step()  
            
     def run_propagation(self, target, mode='linear', at_least=-1, std=None):
