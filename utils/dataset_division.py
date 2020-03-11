@@ -9,8 +9,8 @@ Created on Wed Mar 11 17:42:01 2020
 import os
 import shutil
 import random
-src = "/Users/zhangyiqian/Documents/视频剪辑/毕业vlog/素材/" 
-dst = "/Users/zhangyiqian/Documents/视频剪辑/毕业vlog/"
+src = "/home/yiqian/Documents/dataset/flickr30k-images/" 
+dst = "/home/yiqian/Documents/dataset/flickr30k/"
 train_dst = dst + "train/"
 val_dst = dst + "val/"
 test_dst = dst + "test/"
