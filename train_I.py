@@ -20,7 +20,8 @@ from utils import util
 if __name__ == '__main__':
     opt = TrainOptions().parse()
 
-    opt.dataroot = './dataset/ilsvrc2012/%s/' % opt.phase
+    # opt.dataroot = './dataset/ilsvrc2012/%s/' % opt.phase
+    opt.dataroot = '../../dataset//flickr30k/train/'
     dataset = torchvision.datasets.ImageFolder(opt.dataroot,
                                                transform=transforms.Compose([
                                                     transforms.Resize(opt.loadSize),
