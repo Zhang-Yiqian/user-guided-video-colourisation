@@ -9,7 +9,6 @@ from torchvision import models
 # general libs
 import numpy as np
 import math
-from utils.utils import ToCudaVariable
 from torch import optim
 
 print('Interaction Network: initialized')

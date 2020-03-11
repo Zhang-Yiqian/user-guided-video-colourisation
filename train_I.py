@@ -9,13 +9,13 @@ Created on Tue Feb 25 18:53:25 2020
 import time
 from options.train_options import TrainOptions
 from models import create_model
-from util.visualizer import Visualizer
+# from util.visualizer import Visualizer
 
 import torch
 import torchvision
 import torchvision.transforms as transforms
 
-from utils import util
+from utils import utils
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         # for i, data in enumerate(dataset):
         for i, data_raw in enumerate(dataset_loader):
             data_raw[0] = data_raw[0].cuda()
-            data = util.get_colorization_data(data_raw, opt, p=opt.sample_p)
+            data = utils.get_colorization_data(data_raw, opt, p=opt.sample_p)
             if(data is None):
                 continue
 
