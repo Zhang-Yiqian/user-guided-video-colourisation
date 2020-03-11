@@ -61,33 +61,34 @@ if __name__ == '__main__':
             model.set_input(data)
             model.optimize_parameters()
 
-            if total_steps % opt.display_freq == 0:
-                save_result = total_steps % opt.update_html_freq == 0
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+            print(model.loss)
 
-            if total_steps % opt.print_freq == 0:
-                losses = model.get_current_losses()
-                # time to do forward&backward
-                # t = (time.time() - iter_start_time) / opt.batch_size
-                t = time.time() - iter_start_time
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t, t_data)
-                if opt.display_id > 0:
-                    # embed()
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, opt, losses)
+            # if total_steps % opt.display_freq == 0:
+            #     save_result = total_steps % opt.update_html_freq == 0
+            #     visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
-            if total_steps % opt.save_latest_freq == 0:
-                print('saving the latest model (epoch %d, total_steps %d)' %
-                      (epoch, total_steps))
-                model.save_networks('latest')
+            # if total_steps % opt.print_freq == 0:
+            #     losses = model.loss()
+            #     # time to do forward&backward
+            #     t = time.time() - iter_start_time
+            #     visualizer.print_current_losses(epoch, epoch_iter, losses, t, t_data)
+            #     if opt.display_id > 0:
+            #         # embed()
+            #         visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, opt, losses)
 
-            iter_data_time = time.time()
+        #     if total_steps % opt.save_latest_freq == 0:
+        #         print('saving the latest model (epoch %d, total_steps %d)' %
+        #               (epoch, total_steps))
+        #         model.save_networks('latest')
 
-        if epoch % opt.save_epoch_freq == 0:
-            print('saving the model at the end of epoch %d, iters %d' %
-                  (epoch, total_steps))
-            model.save_networks('latest')
-            model.save_networks(epoch)
+        #     iter_data_time = time.time()
 
-        print('End of epoch %d / %d \t Time Taken: %d sec' %
-              (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
-        model.update_learning_rate()
+        # if epoch % opt.save_epoch_freq == 0:
+        #     print('saving the model at the end of epoch %d, iters %d' %
+        #           (epoch, total_steps))
+        #     model.save_networks('latest')
+        #     model.save_networks(epoch)
+
+        # print('End of epoch %d / %d \t Time Taken: %d sec' %
+        #       (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
+        # model.update_learning_rate()

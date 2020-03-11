@@ -133,6 +133,22 @@ class Decoder(nn.Module):
         return p, p2, p3, p4, p5
 
 
+class HuberLoss(nn.Module):
+    def __init__(self, delta=.01):
+        super(HuberLoss, self).__init__()
+        self.delta=delta
+
+    def __call__(self, in0, in1):
+        mask = torch.zeros_like(in0)
+        mann = torch.abs(in0-in1)
+        eucl = .5 * (mann**2)
+        mask[...] = mann < self.delta
+
+        # loss = eucl*mask + self.delta*(mann-.5*self.delta)*(1-mask)
+        loss = eucl*mask/self.delta + (mann-.5*self.delta)*(1-mask)
+        return torch.sum(loss,dim=1,keepdim=True)
+
+
 class Inet(nn.Module):
     def __init__(self, opt):
         super(Inet, self).__init__()
@@ -141,7 +157,7 @@ class Inet(nn.Module):
         self.Decoder = Decoder(mdim)  # input: m5, r4, r3, r2 >> p
         self.opt = opt
         self.isTrain = opt.isTrain
-
+        self.criterion = HuberLoss()
 
     def forward(self, in_frame, in_strokes, in_prev):
         tr5, tr4, tr3, tr2 = self.Encoder(in_frame, in_strokes, in_prev)
@@ -156,6 +172,9 @@ class Inet(nn.Module):
 
         if not self.isTrain or opt.load_model:
             self.load_networks(opt.which_epoch)
+
+    def setup_input(self, input):
+        self.input = input
 
     # not changed but might be used
     def load_networks(self, which_epoch):
@@ -193,8 +212,13 @@ class Inet(nn.Module):
         print('-----------------------------------------------')
 
 
-
-
+    def optimize_parameters(self):
+        em_ab = self.forward()
+        # update G
+        self.optimizer.zero_grad()
+        self.loss = self.criterion(em_ab, self.input['B'])
+        self.loss.backward()
+        self.optimizer.step()
 
 
 
