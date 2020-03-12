@@ -18,10 +18,11 @@ import torchvision.transforms as transforms
 from utils import utils
 
 if __name__ == '__main__':
-    opt = TrainOptions().parse()
+    opt = TrainOptions()
+    torch.cuda.set_device(opt.gpu_ids)
 
     # opt.dataroot = './dataset/ilsvrc2012/%s/' % opt.phase
-    opt.dataroot = '../../dataset//flickr30k/train/'
+    opt.dataroot = '../../dataset/flickr30k/train/'
     dataset = torchvision.datasets.ImageFolder(opt.dataroot,
                                                transform=transforms.Compose([
                                                     transforms.Resize(opt.loadSize),
@@ -45,7 +46,6 @@ if __name__ == '__main__':
         iter_data_time = time.time()
         epoch_iter = 0
 
-        # for i, data in enumerate(dataset):
         for i, data_raw in enumerate(dataset_loader):
             data_raw[0] = data_raw[0].cuda()
             data = utils.get_colorization_data(data_raw, opt, p=opt.sample_p)
