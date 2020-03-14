@@ -157,6 +157,7 @@ class Inet(nn.Module):
         self.opt = opt
         self.isTrain = opt.isTrain
         self.criterion = HuberLoss()
+        self.model_names = 'Interaction net'
 
     def forward(self, in_frame, in_strokes, in_prev):
         tr5, tr4, tr3, tr2 = self.Encoder(in_frame, in_strokes, in_prev)
@@ -167,7 +168,7 @@ class Inet(nn.Module):
     # load and print networks; create schedulers
     def setup(self, opt, parser=None):
         if self.isTrain:
-            self.optimizer = optim.Adam(model.parameters(), lr = opt.lr, weight_decay = opt.weight_decay) 
+            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, weight_decay = opt.weight_decay) 
 
         if not self.isTrain or opt.load_model:
             self.load_networks(opt.which_epoch)
@@ -195,21 +196,6 @@ class Inet(nn.Module):
                 for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
                     self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
                 net.load_state_dict(state_dict)
-
-    # print network information
-    def print_networks(self, verbose):
-        print('---------- Networks initialized -------------')
-        for name in self.model_names:
-            if isinstance(name, str):
-                net = getattr(self, 'net' + name)
-                num_params = 0
-                for param in net.parameters():
-                    num_params += param.numel()
-                if verbose:
-                    print(net)
-                print('[Network %s] Total number of parameters : %.3f M' % (name, num_params / 1e6))
-        print('-----------------------------------------------')
-
 
     def optimize_parameters(self):
         em_ab = self.forward()

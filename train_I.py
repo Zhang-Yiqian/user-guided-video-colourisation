@@ -8,35 +8,33 @@ Created on Tue Feb 25 18:53:25 2020
 
 import time
 from options.train_options import TrainOptions
-from models import create_model
+from models import create_Inet
 # from util.visualizer import Visualizer
 
 import torch
-import torchvision
 import torchvision.transforms as transforms
+from utils.image_folder import ImageFolder
 
 from utils import utils
 
 if __name__ == '__main__':
-    opt = TrainOptions()
-    torch.cuda.set_device(opt.gpu_ids)
+    opt = TrainOptions().parse()
+    torch.cuda.set_device(int(opt.gpu_ids))
 
     # opt.dataroot = './dataset/ilsvrc2012/%s/' % opt.phase
     opt.dataroot = '../../dataset/flickr30k/train/'
-    dataset = torchvision.datasets.ImageFolder(opt.dataroot,
-                                               transform=transforms.Compose([
-                                                    transforms.Resize(opt.loadSize),
-                                                    transforms.RandomResizedCrop(opt.fineSize),
-                                                    transforms.RandomHorizontalFlip(),
-                                                    transforms.ToTensor()]))
+    dataset = ImageFolder(opt.dataroot, transform=transforms.Compose([
+                                                  transforms.Resize(opt.loadSize),
+                                                  transforms.RandomResizedCrop(opt.fineSize),
+                                                  transforms.RandomHorizontalFlip(),
+                                                  transforms.ToTensor()]))
     dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
 
     dataset_size = len(dataset)
     print('#training images = %d' % dataset_size)
 
-    model = create_model(opt)
+    model = create_Inet(opt)
     model.setup(opt)
-    model.print_networks(True)
 
     # visualizer = Visualizer(opt)
     total_steps = 0

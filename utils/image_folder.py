@@ -14,7 +14,6 @@ Created on Tue Feb 25 18:15:33 2020
 ###############################################################################
 
 import torch.utils.data as data
-from utils import rgb2lab
 from PIL import Image
 import os
 import os.path
@@ -63,7 +62,7 @@ class ImageFolder(data.Dataset):
         self.loader = loader
 
     def __getitem__(self, index):
-        path = self.root + self.imgs[index]
+        path = self.imgs[index]
         img = self.loader(path)
         if self.transform is not None:
             img = self.transform(img)
