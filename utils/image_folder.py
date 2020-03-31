@@ -14,9 +14,13 @@ Created on Tue Feb 25 18:15:33 2020
 ###############################################################################
 
 import torch.utils.data as data
+# from utils import rgb2lab
 from PIL import Image
 import os
 import os.path
+import numpy as np
+from skimage.color import rgb2lab
+from skimage.io import imread
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -42,7 +46,10 @@ def make_dataset(dir):
 
 
 def default_loader(path):
-    return Image.open(path).convert('RGB')
+    img = Image.fromarray(np.uint8(rgb2lab(imread(path)))) 
+    # img[0,:,:] = img[0,:,:] / 100
+    # img[1:,:,:] = img[1:,:,:] / 255
+    return img
 
 
 class ImageFolder(data.Dataset):

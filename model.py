@@ -24,6 +24,7 @@ class model():
             # self.model_P.cuda()
             # self.model_I.load_state_dict(torch.load('models/I_e290.pth'))
             # self.model_P.load_state_dict(torch.load('models/P_e290.pth'))
+            
         else:
             print('Using CPU')
             # self.model_I.load_state_dict(load_UnDP('models/I_e290.pth'))

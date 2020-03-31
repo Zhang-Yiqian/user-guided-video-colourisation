@@ -5,6 +5,26 @@ from PIL import Image
 import os
 from collections import OrderedDict
 from IPython import embed
+import random
+
+def ToCuda(data_np):
+    data = {}
+    for key in data_np.keys():
+        data[key] = torch.from_numpy(data_np[key]).cuda()
+   
+    return data
+
+def PSNR(data_np, em_ab, avg=True):
+    psnr = 0
+    for idx in range(data_np['gray'].shape[0]):
+        em_img = np.append(data_np['gray'][idx,:,:,:], em_ab[idx,:,:,:], axis=0)
+        gt_img = np.append(data_np['gray'][idx,:,:,:], data_np['ab'][idx,:,:,:], axis=0)
+        mse = np.mean( (gt_img - em_img) ** 2 )
+        psnr += 10 * np.log10((1) / mse)  
+    if avg:
+        return psnr / data_np['gray'].shape[0]
+    else:
+        return psnr
 
 # Color conversion code
 def rgb2xyz(rgb): # rgb from [0,1]
@@ -17,7 +37,6 @@ def rgb2xyz(rgb): # rgb from [0,1]
         mask = mask.cuda()
 
     rgb = (((rgb+.055)/1.055)**2.4)*mask + rgb/12.92*(1-mask)
-
     x = .412453*rgb[:,0,:,:]+.357580*rgb[:,1,:,:]+.180423*rgb[:,2,:,:]
     y = .212671*rgb[:,0,:,:]+.715160*rgb[:,1,:,:]+.072169*rgb[:,2,:,:]
     z = .019334*rgb[:,0,:,:]+.119193*rgb[:,1,:,:]+.950227*rgb[:,2,:,:]
@@ -123,25 +142,22 @@ def lab2rgb(lab_rs, opt):
         # embed()
     return out
 
-def get_colorization_data(data_raw, opt, ab_thresh=5., p=.125, num_points=None):
+def get_colorization_data(data_raw, opt, ab_thresh=5., p=.125, num_points=None, first_round=False):
     data = {}
-
-    data_lab = rgb2lab(data_raw[0], opt)
-    data['A'] = data_lab[:,[0,],:,:]
-    data['B'] = data_lab[:,1:,:,:]
-
-    if(ab_thresh > 0): # mask out grayscale images
-        thresh = 1.*ab_thresh/opt.ab_norm
-        mask = torch.sum(torch.abs(torch.max(torch.max(data['B'],dim=3)[0],dim=2)[0]-torch.min(torch.min(data['B'],dim=3)[0],dim=2)[0]),dim=1) >= thresh
-        data['A'] = data['A'][mask,:,:,:]
-        data['B'] = data['B'][mask,:,:,:]
-        # print('Removed %i points'%torch.sum(mask==0).numpy())
-        if(torch.sum(mask)==0):
-            return None
+    if first_round:
+      # data_lab = rgb2lab(data_raw, opt)
+      data_raw[:,0,:,:] = data_raw[:,0,:,:] / 100
+      data_raw[:,1:,:,:] = data_raw[:,1:,:,:] / 255
+      data_lab = data_raw
+    else:
+      data_lab = data_raw
+    data['gray'] = data_lab[:,[0,],:,:]
+    data['ab'] = data_lab[:,1:,:,:]
+    # data['prev'] = torch.zeros_like(data['ab'])
 
     return add_color_patches_rand_gt(data, opt, p=p, num_points=num_points)
 
-def add_color_patches_rand_gt(data,opt,p=.125,num_points=None,use_avg=True,samp='normal'):
+def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, samp='normal'):
 # Add random color points sampled from ground truth based on:
 #   Number of points
 #   - if num_points is 0, then sample from geometric distribution, drawn from probability p
@@ -149,10 +165,9 @@ def add_color_patches_rand_gt(data,opt,p=.125,num_points=None,use_avg=True,samp=
 #   Location of points
 #   - if samp is 'normal', draw from N(0.5, 0.25) of image
 #   - otherwise, draw from U[0, 1] of image
-    N,C,H,W = data['B'].shape
-
-    data['hint_B'] = torch.zeros_like(data['B'])
-    data['mask_B'] = torch.zeros_like(data['A'])
+    N,C,H,W = data['ab'].shape
+    data['hint_B'] = torch.zeros_like(data['ab'])
+    data['mask_B'] = torch.zeros_like(data['gray'])
 
     for nn in range(N):
         pp = 0
@@ -179,16 +194,39 @@ def add_color_patches_rand_gt(data,opt,p=.125,num_points=None,use_avg=True,samp=
             # add color point
             if(use_avg):
                 # embed()
-                data['hint_B'][nn,:,h:h+P,w:w+P] = torch.mean(torch.mean(data['B'][nn,:,h:h+P,w:w+P],dim=2,keepdim=True),dim=1,keepdim=True).view(1,C,1,1)
+                data['hint_B'][nn,:,h:h+P,w:w+P] = torch.mean(torch.mean(data['ab'][nn,:,h:h+P,w:w+P],dim=2,keepdim=True),dim=1,keepdim=True).view(1,C,1,1)
             else:
-                data['hint_B'][nn,:,h:h+P,w:w+P] = data['B'][nn,:,h:h+P,w:w+P]
+                data['hint_B'][nn,:,h:h+P,w:w+P] = data['ab'][nn,:,h:h+P,w:w+P]
 
             data['mask_B'][nn,:,h:h+P,w:w+P] = 1
 
             # increment counter
             pp+=1
+    
+    data['mask_B']-= opt.mask_cent
+    data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
 
-    data['mask_B']-=opt.mask_cent
+    del data["hint_B"] 
+    del data['mask_B']
+
+    data['clicks'] = data['clicks'].numpy()
+    data['gray'] = data['gray'].numpy()
+    data['ab'] = data['ab'].numpy()
+
+    if opt.phase == 'I_auto':
+        data['clicks'] = np.zeros_like(data['clicks'])
+        data['prev'] = np.zeros_like(data['ab'])
 
     return data
 
+def save_model(model, opt, epoch, model_index):
+    file_name = opt.phase+'_'+'ep'+str(epoch)+'_'+'val'+'_'+str(model_index)+'.pkl'
+    if os.path.exists(file_name):
+        file_name = 'backup_' + file_name
+        warnings.warn("The model file already exits!", Warning)
+    if opt.gpu_ids is not None:
+        model.cpu()
+        torch.save(model, file_name)
+        model.cuda()
+    else:
+        torch.save(model, file_name)
