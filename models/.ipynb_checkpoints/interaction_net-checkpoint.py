@@ -112,7 +112,6 @@ class Decoder(nn.Module):
         self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
         self.RF2 = Refine(256, mdim)   # 1/4 -> 1
         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
-        self.tanh = nn.Tanh()
         
         for m in self.modules():
           if isinstance(m, nn.Conv2d):
@@ -127,16 +126,12 @@ class Decoder(nn.Module):
         x = self.ResFM(r5)
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
-        x = self.RF2(r2, x)  # out: 1/4, 256
-        x = self.pred2(F.relu(x))
+        m2 = self.RF2(r2, x)  # out: 1/4, 256
+        p2 = self.pred2(F.relu(m2))
 
-        x = F.interpolate(x, scale_factor=4, mode='bilinear')
+        p = F.interpolate(p2, scale_factor=4, mode='bilinear')
         
-        if is_regression:
-            x = self.tanh(x)
-        else:
-            
-        return p
+        return p#, p2
 
 
 class HuberLoss(nn.Module):

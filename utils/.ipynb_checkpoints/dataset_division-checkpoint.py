@@ -9,8 +9,8 @@ Created on Wed Mar 11 17:42:01 2020
 import os
 import shutil
 import random
-src = "/home/zhangy23/dataset/coco/" 
-dst = "/home/zhangy23/dataset/coco/"
+src = "/home/zhangy23/dataset/coco/val/" 
+dst = "/home/zhangy23/dataset/coco/subval/"
 train_dst = dst + "train/"
 val_dst = dst + "val/"
 test_dst = dst + "test/"
