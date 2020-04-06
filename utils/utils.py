@@ -6,12 +6,21 @@ import os
 from collections import OrderedDict
 from IPython import embed
 import random
+from skimage.transform import rescale
+import torch.nn.functional as F
 
 def ToCuda(data_cpu):
     data = {}
     for key in data_cpu.keys():
         # data[key] = torch.from_numpy(data_np[key]).float().cuda()
         data[key] = data_cpu[key].float().cuda()
+   
+    return data
+
+def ToCPU(data_cuda):
+    data = {}
+    for key in data_cpu.keys():
+        data[key] = data_cuda[key].detach().float().cpu()
    
     return data
 
@@ -162,10 +171,6 @@ def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, 
 #   Location of points
 #   - if samp is 'normal', draw from N(0.5, 0.25) of image
 #   - otherwise, draw from U[0, 1] of image
-    if opt.is_prev:
-        data['clicks'] = torch.zeros_like(data['clicks'])
-        data['prev'] = torch.zeros_like(data['ab'])
-        return data
     
     N,C,H,W = data['ab'].shape
     data['hint_B'] = torch.zeros_like(data['ab'])
@@ -207,7 +212,11 @@ def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, 
     
     data['mask_B']-= opt.mask_cent
     data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
-
+    
+    if opt.no_prev:
+        data['clicks'] = torch.zeros_like(data['clicks'])
+        data['prev'] = torch.zeros_like(data['ab'])
+    
     return data
 
 def save_model(model, opt, epoch, model_index, psnr):
@@ -286,14 +295,25 @@ def decode_mean(data_ab_quant, opt):
 
     return data_ab_inf
 
-def PSNR(data_np, em_ab, opt, avg=True):
+def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     psnr = 0
-    for idx in range(data_np['gray'].shape[0]):
-        em_img = np.append(data_np['gray'][idx,:,:,:], em_ab[idx,:,:,:], axis=0) * opt.norm_factor
-        gt_img = np.append(data_np['gray'][idx,:,:,:], data_np['ab'][idx,:,:,:], axis=0) * opt.norm_factor
-        mse = np.mean( (gt_img - em_img) ** 2 )
-        psnr += 10 * np.log10((1) / mse)  
+    fake_ab = decode_max_ab(fake_ab, opt)
+    fake_ab = F.interpolate(fake_ab, scale_factor=4)
+    fake_img = torch.cat((lightness, fake_ab), 1) 
+    real_img = torch.cat((lightness, real_ab), 1) 
+    fake_rgb = lab2rgb(fake_img, opt)
+    real_rgb = lab2rgb(real_img, opt)
+    for idx in range(lightness.shape[0]):
+        # print(lightness[idx,:,:,:].shape, fake_ab.shape)
+        # fake_img = torch.cat((lightness[idx,:,:,:], fake_ab[idx,:,:,:]), 0) 
+        # real_img = torch.cat((lightness[idx,:,:,:], real_ab[idx,:,:,:]), 0) 
+        # fake_rgb = lab2rgb(torch.unsqueeze(fake_img, 0), opt)[0, :, :, :]
+        # real_rgb = lab2rgb(torch.unsqueeze(real_img, 0), opt)[0, :, :, :]
+        
+        mse = torch.mean( (fake_rgb[idx, :, :, :] - real_rgb[idx, :, :, :]) ** 2 )
+        psnr += 10 * torch.log10(1.0 / mse)  
+        
     if avg:
-        return psnr / data_np['gray'].shape[0]
+        return (psnr / lightness.shape[0]).cpu().numpy()
     else:
-        return psnr
+        return psnr.cpu().numpy()

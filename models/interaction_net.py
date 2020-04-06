@@ -12,7 +12,8 @@ import math
 from torch import optim
 import warnings
 import os
-
+from utils.utils import *
+import torch
 print('Interaction Network: initialized')
 
 
@@ -105,12 +106,14 @@ class Refine(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, mdim):
+    def __init__(self, mdim, opt):
         super(Decoder, self).__init__()
+        self.opt = opt
         self.ResFM = ResBlock(2048, mdim)
         self.RF4 = Refine(1024, mdim)  # 1/16 -> 1/8
         self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
         self.RF2 = Refine(256, mdim)   # 1/4 -> 1
+        self.pred1 = nn.Conv2d(mdim, 529, kernel_size=(1,1), padding=(0, 0), stride=1)
         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.tanh = nn.Tanh()
         
@@ -128,15 +131,14 @@ class Decoder(nn.Module):
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
         x = self.RF2(r2, x)  # out: 1/4, 256
-        x = self.pred2(F.relu(x))
-
-        x = F.interpolate(x, scale_factor=4, mode='bilinear')
-        
-        if is_regression:
-            x = self.tanh(x)
+        if self.opt.is_regression:
+            x = self.pred2(F.relu(x))
+            x = F.interpolate(x, scale_factor=4, mode='bilinear')
+            out_reg = self.tanh(x)
+            return out_reg
         else:
-            
-        return p
+            out_class = self.pred1(F.relu(x))
+            return out_class
 
 
 class HuberLoss(nn.Module):
@@ -159,10 +161,11 @@ class Inet(nn.Module):
         super(Inet, self).__init__()
         mdim = 228
         self.Encoder = Encoder(opt)      # inputs: ref: rf, rm / tar: tf, tm
-        self.Decoder = Decoder(mdim)  # input: m5, r4, r3, r2 >> p
+        self.Decoder = Decoder(mdim, opt)  # input: m5, r4, r3, r2 >> p
         self.opt = opt
         self.isTrain = opt.isTrain
-        self.criterion = nn.SmoothL1Loss() 
+        self.auto_colour = opt.no_prev
+        self.is_regression = opt.is_regression
 
     def forward(self, gray, clicks, prev):
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
@@ -174,9 +177,17 @@ class Inet(nn.Module):
     def setup(self, opt):
         if self.isTrain:
             self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, weight_decay = opt.weight_decay) 
+        if self.is_regression:
+            self.criterion = nn.SmoothL1Loss() 
+        else:
+            self.criterion = nn.CrossEntropyLoss()
+            
+    def calc_loss(self, real, fake):
+        self.optimizer.zero_grad()
+        self.real_enc = encode_ab_ind(real[:, :, ::4, ::4], self.opt)
+        self.real_enc = torch.flatten(self.real_enc, start_dim=1).long()
+        self.fake = torch.flatten(fake, start_dim=2).float()
+        loss = self.criterion(self.fake, self.real_enc)
 
-
-
-
-
+        return loss
 
