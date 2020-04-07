@@ -4,24 +4,23 @@ class DefaultConfig(object):
     def __init__(self):
       self.phase = 'I_auto'
       self.gpu_ids = 1
-      self.load_model = False
-    
+      self.load_model = True
+      self.model_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_6.pkl'
       self.no_prev = True
-      self.is_regression = False
+      self.is_regression = True
       
       self.loadSize = 256
       self.fineSize = 224
-      self.batch_size = 50
+      self.batch_size = 40
       self.batch_size_val = 8
         
       self.isTrain = 'train'
-      self.val_freq = 50
-      self.print_freq = 10
+      self.val_freq = 300
+      self.print_freq = 20
       self.epoch_count = 10
-      self.norm_factor = 128
       self.lr = 0.0001
-      self.weight_decay = 1e-4 
-      self.niter = 10
+      self.beta1 = 0.9
+      self.niter = 15
       self.epoch_count = 0
       self.niter_decay = 0
       self.sample_p = 0.125

@@ -160,6 +160,14 @@ def get_colorization_data(data_raw, opt, ab_thresh=5., p=.125, num_points=None):
     data['gray'] = data_lab[:,[0,],:,:]
     data['ab'] = data_lab[:,1:,:,:]
     # data['prev'] = torch.zeros_like(data['ab'])
+    if(ab_thresh > 0): # mask out grayscale images
+        thresh = 1.*ab_thresh/opt.ab_norm
+        mask = torch.sum(torch.abs(torch.max(torch.max(data['ab'],dim=3)[0],dim=2)[0]-torch.min(torch.min(data['ab'],dim=3)[0],dim=2)[0]),dim=1) >= thresh
+        data['gray'] = data['gray'][mask,:,:,:]
+        data['ab'] = data['ab'][mask,:,:,:]
+        # print('Removed %i points'%torch.sum(mask==0).numpy())
+        if(torch.sum(mask)==0):
+            return None
 
     return add_color_patches_rand_gt(data, opt, p=p, num_points=num_points)
 
@@ -214,7 +222,7 @@ def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, 
     data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
     
     if opt.no_prev:
-        data['clicks'] = torch.zeros_like(data['clicks'])
+        # data['clicks'] = torch.zeros_like(data['clicks'])
         data['prev'] = torch.zeros_like(data['ab'])
     
     return data
@@ -297,8 +305,9 @@ def decode_mean(data_ab_quant, opt):
 
 def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     psnr = 0
-    fake_ab = decode_max_ab(fake_ab, opt)
-    fake_ab = F.interpolate(fake_ab, scale_factor=4)
+    if not opt.is_regression:
+        fake_ab = decode_max_ab(fake_ab, opt)
+        fake_ab = F.interpolate(fake_ab, scale_factor=4)
     fake_img = torch.cat((lightness, fake_ab), 1) 
     real_img = torch.cat((lightness, real_ab), 1) 
     fake_rgb = lab2rgb(fake_img, opt)

@@ -21,7 +21,7 @@ class Encoder(nn.Module):
     def __init__(self, opt):
         super(Encoder, self).__init__()
         # clicks(2) & binary mask
-        self.conv1_clicks = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        self.conv1_clicks = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True) 
         # previous round frame, ab space
         self.conv1_prev = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=True)
         # grayscale
@@ -52,11 +52,11 @@ class Encoder(nn.Module):
             self.auto_colourisation = False  
 
     def forward(self, gray, clicks, prev):
-        m = self.conv1_prev(prev) + self.conv1_clicks(clicks)
+        m = self.conv1_prev(prev)
         if self.auto_colourisation:
-            x = m.detach() + self.conv1_gray(gray)
+            x = m.detach() + self.conv1_gray(gray) + self.conv1_clicks(clicks)
         else:
-            x = m + self.conv1_gray(gray) 
+            x = m + self.conv1_gray(gray) + self.conv1_clicks(clicks)
         x = self.bn1(x)
         x = self.relu(x)     # 1/2, 64
         x = self.maxpool(x)  # 1/4, 64
@@ -176,18 +176,22 @@ class Inet(nn.Module):
     # load and print networks; create schedulers
     def setup(self, opt):
         if self.isTrain:
-            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, weight_decay = opt.weight_decay) 
+            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999)) 
         if self.is_regression:
             self.criterion = nn.SmoothL1Loss() 
         else:
             self.criterion = nn.CrossEntropyLoss()
+        if self.load_model:
             
     def calc_loss(self, real, fake):
-        self.optimizer.zero_grad()
-        self.real_enc = encode_ab_ind(real[:, :, ::4, ::4], self.opt)
-        self.real_enc = torch.flatten(self.real_enc, start_dim=1).long()
-        self.fake = torch.flatten(fake, start_dim=2).float()
-        loss = self.criterion(self.fake, self.real_enc)
+        self.fake = fake
+        self.real = real
+        if not self.opt.is_regression:
+            self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
+            self.fake = self.fake.float()
+        # self.real_enc = torch.flatten(self.real_enc, start_dim=1).long()
+        # self.fake = torch.flatten(fake, start_dim=2).float()
+        loss = self.criterion(self.fake, self.real)
 
         return loss
 
