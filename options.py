@@ -4,8 +4,8 @@ class DefaultConfig(object):
     def __init__(self):
       self.phase = 'I_auto'
       self.gpu_ids = 1
-      self.load_model = True
-      self.model_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_6.pkl'
+      # self.load_model = False
+      # self.model_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_6.pkl'
       self.no_prev = True
       self.is_regression = True
       
@@ -37,7 +37,7 @@ class DefaultConfig(object):
       self.dataroot_train = None
       self.dataroot_val = None
     
-      self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/auto_I/'
+      self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/auto_lr_0.0001/'
       self.dataroot = '/home/zhangy23/dataset/coco/'
 
     def parse(self,kwargs):

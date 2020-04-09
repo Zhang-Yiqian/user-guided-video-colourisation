@@ -153,7 +153,8 @@ class HuberLoss(nn.Module):
         mask[...] = mann < self.delta
 
         loss = eucl*mask/self.delta + (mann-.5*self.delta)*(1-mask)
-        return torch.sum(loss,dim=1,keepdim=True)
+        # return torch.sum(loss,dim=1,keepdim=True)
+        return torch.mean(loss)
 
 
 class Inet(nn.Module):
@@ -178,11 +179,11 @@ class Inet(nn.Module):
         if self.isTrain:
             self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999)) 
         if self.is_regression:
-            self.criterion = nn.SmoothL1Loss() 
+            # self.criterion = nn.SmoothL1Loss() 
+            self.criterion = HuberLoss(delta=1. / opt.ab_norm)
         else:
             self.criterion = nn.CrossEntropyLoss()
-        if self.load_model:
-            
+
     def calc_loss(self, real, fake):
         self.fake = fake
         self.real = real
@@ -194,4 +195,3 @@ class Inet(nn.Module):
         loss = self.criterion(self.fake, self.real)
 
         return loss
-
