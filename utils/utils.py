@@ -187,19 +187,19 @@ def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, 
     for nn in range(N):
         pp = 0
         cont_cond = True
-        while(cont_cond):
-            if(num_points is None): # draw from geometric
+        while cont_cond:
+            if num_points is None: # draw from geometric
                 # embed()
                 cont_cond = np.random.rand() < (1-p)
             else: # add certain number of points
                 cont_cond = pp < num_points
-            if(not cont_cond): # skip out of loop if condition not met
+            if not cont_cond: # skip out of loop if condition not met
                 continue
 
             P = np.random.choice(opt.sample_Ps) # patch size
 
             # sample location
-            if(samp=='normal'): # geometric distribution
+            if samp=='normal': # geometric distribution
                 h = int(np.clip(np.random.normal( (H-P+1)/2., (H-P+1)/4.), 0, H-P))
                 w = int(np.clip(np.random.normal( (W-P+1)/2., (W-P+1)/4.), 0, W-P))
             else: # uniform distribution
@@ -207,7 +207,7 @@ def add_color_patches_rand_gt(data, opt, p=.125, num_points=None, use_avg=True, 
                 w = np.random.randint(W-P+1)
 
             # add color point
-            if(use_avg):
+            if use_avg:
                 # embed()
                 data['hint_B'][nn,:,h:h+P,w:w+P] = torch.mean(torch.mean(data['ab'][nn,:,h:h+P,w:w+P],dim=2,keepdim=True),dim=1,keepdim=True).view(1,C,1,1)
             else:
