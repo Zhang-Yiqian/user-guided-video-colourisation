@@ -167,6 +167,7 @@ class Inet(nn.Module):
         self.isTrain = opt.isTrain
         self.auto_colour = opt.no_prev
         self.is_regression = opt.is_regression
+        self.load_model = opt.load_model
 
     def forward(self, gray, clicks, prev):
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
@@ -178,12 +179,17 @@ class Inet(nn.Module):
     def setup(self, opt):
         if self.isTrain:
             self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999)) 
+            
         if self.is_regression:
             # self.criterion = nn.SmoothL1Loss() 
             self.criterion = HuberLoss(delta=1. / opt.ab_norm)
         else:
             self.criterion = nn.CrossEntropyLoss()
-
+            
+        if self.load_model:
+            self.load_state_dict(torch.load(opt.load_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            print('load sccess')
+            
     def calc_loss(self, real, fake):
         self.fake = fake
         self.real = real
