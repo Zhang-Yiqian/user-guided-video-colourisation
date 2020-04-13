@@ -32,7 +32,7 @@ class DefaultConfig(object):
       self.A = 2 * self.ab_max / self.ab_quant + 1
       self.sample_Ps = [1, 2, 3, 4, 5, 6, 7, 8, 9]
       self.mask_cent = 0.5
-      # self.env = 'default'
+      self.mean_kernel = 16
       self.seed = 2020
       self.dataroot_train = None
       self.dataroot_val = None
