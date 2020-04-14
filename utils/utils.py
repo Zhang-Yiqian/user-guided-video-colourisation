@@ -8,7 +8,6 @@ from IPython import embed
 import random
 from skimage.transform import rescale
 import torch.nn.functional as F
-import cv2
 from scipy import signal
 
 def ToCuda(data_cpu):
@@ -170,8 +169,15 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
         # print('Removed %i points'%torch.sum(mask==0).numpy())
         if(torch.sum(mask)==0):
             return None
-
-    return add_color_patches_rand_gt(data, opt, prev, p=p, num_points=num_points)
+    if opt.no_prev:
+        data['prev'] = torch.zeros_like(data['ab'])
+        N,C,H,W = data['ab'].shape
+        data['clicks'] = torch.zeros([N, C+1, H, W])
+        return data
+    else:
+        data['prev'] = prev
+        samp='l2'
+    return add_color_patches_rand_gt(data, opt, prev, p=p, num_points=num_points, samp=samp)
 
 def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=True, samp='normal'):
 # Add random color points sampled from ground truth based on:
@@ -185,8 +191,8 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
     N,C,H,W = data['ab'].shape
     data['hint_B'] = torch.zeros_like(data['ab'])
     data['mask_B'] = torch.zeros_like(data['gray'])
-    if prev:
-        l2_dist = torch.sum(torch.pow(data['ab']-prev, 2), dim=1).numpy()
+    if prev is not None:
+        l2_dist = torch.sum(torch.pow(data['ab']-prev, 2), dim=1).detach().numpy()
 
     for nn in range(N):
         pp = 0
@@ -206,7 +212,7 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
             if samp == 'normal': # geometric distribution
                 h = int(np.clip(np.random.normal( (H-P+1)/2., (H-P+1)/4.), 0, H-P))
                 w = int(np.clip(np.random.normal( (W-P+1)/2., (W-P+1)/4.), 0, W-P))
-            elif samp = 'uniform': # uniform distribution
+            elif samp == 'uniform': # uniform distribution
                 h = np.random.randint(H-P+1)
                 w = np.random.randint(W-P+1)
             # sample location - L2 distance method
@@ -215,7 +221,7 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
                 l2_mean = signal.convolve(l2_dist[nn,:,:], k, mode = "valid")[::16, ::16]  # 16x16 mean 
                 area_h, area_w = np.where(l2_mean==np.max(l2_mean))
                 area_h, area_w = area_h[0]*16, area_w[0]*16
-                max_area = l[area_h: area_h+16, area_w: area_w+16]
+                max_area = l2_dist[nn, area_h: area_h+16, area_w: area_w+16]
                 h_, w_ = np.where(max_area == np.max(max_area))
                 h, w = h_[0] + area_h, w_[0]+ area_w
 
@@ -233,10 +239,6 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
     
     data['mask_B']-= opt.mask_cent
     data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
-    
-    if opt.no_prev:
-        # data['clicks'] = torch.zeros_like(data['clicks'])
-        data['prev'] = torch.zeros_like(data['ab'])
     
     return data
 
@@ -321,6 +323,9 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     if not opt.is_regression:
         fake_ab = decode_max_ab(fake_ab, opt)
         fake_ab = F.interpolate(fake_ab, scale_factor=4)
+    lightness = lightness.cpu()
+    fake_ab = fake_ab.cpu()
+    real_ab = real_ab.cpu()
     fake_img = torch.cat((lightness, fake_ab), 1) 
     real_img = torch.cat((lightness, real_ab), 1) 
     fake_rgb = lab2rgb(fake_img, opt)

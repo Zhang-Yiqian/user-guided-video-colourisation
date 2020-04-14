@@ -165,7 +165,6 @@ class Inet(nn.Module):
         self.Decoder = Decoder(mdim, opt)  # input: m5, r4, r3, r2 >> p
         self.opt = opt
         self.isTrain = opt.isTrain
-        self.auto_colour = opt.no_prev
         self.is_regression = opt.is_regression
         self.load_model = opt.load_model
 
