@@ -177,7 +177,7 @@ class Inet(nn.Module):
     # load and print networks; create schedulers
     def setup(self, opt):
         if self.isTrain:
-            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999)) 
+            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay) 
             
         if self.is_regression:
             # self.criterion = nn.SmoothL1Loss() 

@@ -169,14 +169,17 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
         # print('Removed %i points'%torch.sum(mask==0).numpy())
         if(torch.sum(mask)==0):
             return None
-    if opt.no_prev:
-        data['prev'] = torch.zeros_like(data['ab'])
-        N,C,H,W = data['ab'].shape
-        data['clicks'] = torch.zeros([N, C+1, H, W])
-        return data
-    else:
+    if prev is not None:
         data['prev'] = prev
         samp='l2'
+    else:
+        data['prev'] = torch.zeros_like(data['ab'])
+        N,C,H,W = data['ab'].shape
+        # data['clicks'] = torch.zeros([N, C+1, H, W])
+        data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
+        samp='normal'
+        return data
+    
     return add_color_patches_rand_gt(data, opt, prev, p=p, num_points=num_points, samp=samp)
 
 def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=True, samp='normal'):
@@ -193,7 +196,11 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
     data['mask_B'] = torch.zeros_like(data['gray'])
     if prev is not None:
         l2_dist = torch.sum(torch.pow(data['ab']-prev, 2), dim=1).detach().numpy()
-
+        k = 1/opt.mean_kernel**2 * np.ones([opt.mean_kernel, opt.mean_kernel])
+        l2_mean = np.zeros([l2_dist.shape[0], int(opt.fineSize/opt.mean_kernel), int(opt.fineSize/opt.mean_kernel)])
+        for i in range(l2_dist.shape[0]):
+            l2_mean[i, :, :] = signal.convolve(l2_dist[i,:,:], k, mode = "valid")[::16, ::16]  # 14x14 mean 
+    
     for nn in range(N):
         pp = 0
         cont_cond = True
@@ -217,10 +224,10 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
                 w = np.random.randint(W-P+1)
             # sample location - L2 distance method
             else:
-                k = 1/opt.mean_kernel**2 * np.ones([opt.mean_kernel, opt.mean_kernel])
-                l2_mean = signal.convolve(l2_dist[nn,:,:], k, mode = "valid")[::16, ::16]  # 16x16 mean 
-                area_h, area_w = np.where(l2_mean==np.max(l2_mean))
-                area_h, area_w = area_h[0]*16, area_w[0]*16
+                area_h_, area_w_ = np.where(l2_mean[nn, :, :]==np.max(l2_mean[nn, :, :]))
+                area_h, area_w = area_h_[0]*16, area_w_[0]*16
+                # set to 0 in case of repeating
+                l2_mean[nn, area_h_[0], area_w_[0]] = 0
                 max_area = l2_dist[nn, area_h: area_h+16, area_w: area_w+16]
                 h_, w_ = np.where(max_area == np.max(max_area))
                 h, w = h_[0] + area_h, w_[0]+ area_w
@@ -237,9 +244,9 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
             # increment counter
             pp+=1
     
-    data['mask_B']-= opt.mask_cent
+    data['mask_B'] -= opt.mask_cent
     data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
-    
+        
     return data
 
 def save_model(model, opt, epoch, model_index, psnr):
