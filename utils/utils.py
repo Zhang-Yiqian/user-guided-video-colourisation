@@ -169,14 +169,15 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
         # print('Removed %i points'%torch.sum(mask==0).numpy())
         if(torch.sum(mask)==0):
             return None
+    
     if prev is not None:
         data['prev'] = prev
         samp='l2'
     else:
         data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
-        # data['clicks'] = torch.zeros([N, C+1, H, W])
-        data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
+        data['clicks'] = torch.zeros([N, C+1, H, W])
+        # data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
         samp='normal'
         return data
     
