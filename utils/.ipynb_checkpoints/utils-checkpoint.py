@@ -173,6 +173,7 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
     if prev is not None:
         data['prev'] = prev
         samp='l2'
+        # data['prev'] = torch.zeros_like(data['ab'])
     else:
         data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
@@ -200,7 +201,7 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
         k = 1/opt.mean_kernel**2 * np.ones([opt.mean_kernel, opt.mean_kernel])
         l2_mean = np.zeros([l2_dist.shape[0], int(opt.fineSize/opt.mean_kernel), int(opt.fineSize/opt.mean_kernel)])
         for i in range(l2_dist.shape[0]):
-            l2_mean[i, :, :] = signal.convolve(l2_dist[i,:,:], k, mode = "valid")[::16, ::16]  # 14x14 mean 
+            l2_mean[i, :, :] = signal.convolve(l2_dist[i,:,:], k, mode = "valid")[::opt.mean_kernel, ::opt.mean_kernel] # 7x7 mean 
     
     for nn in range(N):
         pp = 0
@@ -226,10 +227,10 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
             # sample location - L2 distance method
             else:
                 area_h_, area_w_ = np.where(l2_mean[nn, :, :]==np.max(l2_mean[nn, :, :]))
-                area_h, area_w = area_h_[0]*16, area_w_[0]*16
+                area_h, area_w = area_h_[0]*opt.mean_kernel, area_w_[0]*opt.mean_kernel
                 # set to 0 in case of repeating
                 l2_mean[nn, area_h_[0], area_w_[0]] = 0
-                max_area = l2_dist[nn, area_h: area_h+16, area_w: area_w+16]
+                max_area = l2_dist[nn, area_h: area_h+opt.mean_kernel, area_w: area_w+opt.mean_kernel]
                 h_, w_ = np.where(max_area == np.max(max_area))
                 h, w = h_[0] + area_h, w_[0]+ area_w
 
@@ -247,7 +248,7 @@ def add_color_patches_rand_gt(data, opt, prev, p=.125, num_points=None, use_avg=
     
     data['mask_B'] -= opt.mask_cent
     data['clicks'] = torch.cat((data['mask_B'], data['hint_B']),dim=1)
-        
+
     return data
 
 def save_model(model, opt, epoch, model_index, psnr):
@@ -338,6 +339,7 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     real_img = torch.cat((lightness, real_ab), 1) 
     fake_rgb = lab2rgb(fake_img, opt)
     real_rgb = lab2rgb(real_img, opt)
+    fake_rgb[fake_rgb > 1] = 1.0
     for idx in range(lightness.shape[0]):
         # print(lightness[idx,:,:,:].shape, fake_ab.shape)
         # fake_img = torch.cat((lightness[idx,:,:,:], fake_ab[idx,:,:,:]), 0) 

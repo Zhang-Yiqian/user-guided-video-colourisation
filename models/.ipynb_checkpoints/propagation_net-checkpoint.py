@@ -134,6 +134,7 @@ class Pnet(nn.Module):
         self.Encoder = Encoder() # inputs:: ref: rf, rm / tar: tf, tm 
         self.SEFA = SEFA(2048, r=2)
         self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
+        self.cnt = 0
 
     def forward(self, gray, prev_r, prev_t, fam_ref=None):
         tr5, tr4, tr3, tr2 = self.Encoder(in_gray, in_frame_r, in_frame_t)
