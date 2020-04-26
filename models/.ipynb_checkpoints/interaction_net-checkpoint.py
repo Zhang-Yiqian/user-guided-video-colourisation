@@ -20,6 +20,7 @@ print('Interaction Network: initialized')
 class Encoder(nn.Module):
     def __init__(self, opt):
         super(Encoder, self).__init__()
+        self.opt = opt
         # clicks(2) & binary mask
         self.conv1_clicks = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=True) 
         # previous round frame, ab space
@@ -46,14 +47,9 @@ class Encoder(nn.Module):
         self.res4 = resnet.layer3  # 1/16, 1024
         self.res5 = resnet.layer4  # 1/32, 2048
 
-        if opt.phase == 'I_auto':
-            self.auto_colourisation = True  
-        else:
-            self.auto_colourisation = False  
-
     def forward(self, gray, clicks, prev):
         m = self.conv1_prev(prev)
-        if self.auto_colourisation:
+        if self.opt.no_prev:
             x = m.detach() + self.conv1_gray(gray) + self.conv1_clicks(clicks)
         else:
             x = m + self.conv1_gray(gray) + self.conv1_clicks(clicks)
@@ -131,14 +127,10 @@ class Decoder(nn.Module):
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
         x = self.RF2(r2, x)  # out: 1/4, 256
-        if self.opt.is_regression:
-            x = self.pred2(F.relu(x))
-            x = F.interpolate(x, scale_factor=4, mode='bilinear')
-            out_reg = self.tanh(x)
-            return out_reg
-        else:
-            out_class = self.pred1(F.relu(x))
-            return out_class
+        x = self.pred2(F.relu(x))
+        x = F.interpolate(x, scale_factor=4, mode='bilinear')
+        out_reg = self.tanh(x)
+        return out_reg
 
 
 class HuberLoss(nn.Module):
@@ -165,38 +157,30 @@ class Inet(nn.Module):
         self.Decoder = Decoder(mdim, opt)  # input: m5, r4, r3, r2 >> p
         self.opt = opt
         self.isTrain = opt.isTrain
-        self.is_regression = opt.is_regression
-        self.load_model = opt.load_model
+        self.load_I = opt.load_I
+        self.I_path = opt.I_path
 
     def forward(self, gray, clicks, prev):
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
         em_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
-        return em_ab
+        return em_ab, tr5
 
     # load and print networks; create schedulers
     def setup(self, opt):
         if self.isTrain:
-            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999)) 
+            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay) 
+        self.criterion = HuberLoss(delta=1. / opt.ab_norm)
             
-        if self.is_regression:
-            # self.criterion = nn.SmoothL1Loss() 
-            self.criterion = HuberLoss(delta=1. / opt.ab_norm)
-        else:
-            self.criterion = nn.CrossEntropyLoss()
-            
-        if self.load_model:
-            self.load_state_dict(torch.load(opt.load_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
-            print('load sccess')
+        if self.load_I:
+            self.load_state_dict(torch.load(self.I_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            print('loading Inet sccesses')
             
     def calc_loss(self, real, fake):
         self.fake = fake
         self.real = real
-        if not self.opt.is_regression:
-            self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
-            self.fake = self.fake.float()
-        # self.real_enc = torch.flatten(self.real_enc, start_dim=1).long()
-        # self.fake = torch.flatten(fake, start_dim=2).float()
+        self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
+        self.fake = self.fake.float()
         loss = self.criterion(self.fake, self.real)
 
         return loss

@@ -3,18 +3,17 @@ import warnings
 class DefaultConfig(object):
     def __init__(self):
       self.phase = 'I_prev'
-      self.gpu_ids = 2
-      self.load_model = False
-      self.load_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_2_27.26.pkl'
+      self.gpu_ids = 1
       self.no_prev = False
       self.is_regression = True
-      
+      self.load_P = False
+      self.P_path = None
       self.loadSize = 256
       self.fineSize = 224
       self.batch_size = 32
-      self.batch_size_val = 8
+      self.batch_size_val = 32
         
-      self.isTrain = 'train'
+      self.isTrain = 'True'
       self.val_freq = 150
       self.print_freq = 20
       self.epoch_count = 10
@@ -38,7 +37,9 @@ class DefaultConfig(object):
       self.seed = 2020
       self.dataroot_train = None
       self.dataroot_val = None
-    
+        
+      self.load_I = True
+      self.I_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_2_27.26.pkl'
       self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I_lr_0.00001_wd/'
       self.dataroot = '/home/zhangy23/dataset/coco/'
 
@@ -53,3 +54,4 @@ class DefaultConfig(object):
         for k,v in self.__class__.__dict__.iteritems():
             if not k.startswith('__'):
                 print(k,getattr(self,k))
+                

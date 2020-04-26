@@ -1,3 +1,12 @@
+from __future__ import division
+import torch
+
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import models
+
+# general libs
+import math
 print('Propagation Network: initialising')
 
 class Encoder(nn.Module):
@@ -80,7 +89,7 @@ class Refine(nn.Module):
         return m
 
 class Decoder(nn.Module):
-    def __init__(self, mdim):
+    def __init__(self, mdim, opt):
         super(Decoder, self).__init__()
         self.ResFM1 = ResBlock(4096, 1024)
         self.ResFM2= ResBlock(1024, mdim)
@@ -88,6 +97,7 @@ class Decoder(nn.Module):
         self.RF3 = Refine(512, mdim) # 1/8 -> 1/4
         self.RF2 = Refine(256, mdim) # 1/4 -> 1
         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
+        self.opt = opt
 
     def forward(self, rr5, r5, r4, r3, r2):
         
@@ -97,14 +107,10 @@ class Decoder(nn.Module):
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
         x = self.RF2(r2, x)  # out: 1/4, 256
-        if self.opt.is_regression:
-            x = self.pred2(F.relu(x))
-            x = F.interpolate(x, scale_factor=4, mode='bilinear')
-            out_reg = self.tanh(x)
-            return out_reg
-        else:
-            out_class = self.pred1(F.relu(x))
-            return out_class
+        x = self.pred2(F.relu(x))
+        x = F.interpolate(x, scale_factor=4, mode='bilinear')
+        out_reg = self.tanh(x)
+        return out_reg
 
         
 class SEFA(nn.Module):
@@ -126,24 +132,60 @@ class SEFA(nn.Module):
         out = x1*w1 + x2*w2 
         return out
 
+class HuberLoss(nn.Module):
+    def __init__(self, delta=.01):
+        super(HuberLoss, self).__init__()
+        self.delta=delta
+
+    def __call__(self, in0, in1):
+        mask = torch.zeros_like(in0)
+        mann = torch.abs(in0-in1)
+        eucl = .5 * (mann**2)
+        mask[...] = mann < self.delta
+
+        loss = eucl*mask/self.delta + (mann-.5*self.delta)*(1-mask)
+        # return torch.sum(loss,dim=1,keepdim=True)
+        return torch.mean(loss)
 
 class Pnet(nn.Module):
-    def __init__(self):
+    def __init__(self, opt):
         super(Pnet, self).__init__()
         mdim = 228
         self.Encoder = Encoder() # inputs:: ref: rf, rm / tar: tf, tm 
         self.SEFA = SEFA(2048, r=2)
-        self.Decoder = Decoder(mdim) # input: m5, r4, r3, r2 >> p
-        self.cnt = 0
+        self.Decoder = Decoder(mdim, opt) # input: m5, r4, r3, r2 >> p
+        self.isTrain = opt.isTrain
+        self.load_P = opt.load_P
+        self.P_path = opt.P_path
+        self.opt = opt
 
-    def forward(self, gray, prev_r, prev_t, fam_ref=None):
-        tr5, tr4, tr3, tr2 = self.Encoder(in_gray, in_frame_r, in_frame_t)
+    def forward(self, gray, prev_r, prev_t, crt_fam, prev_fam=None):
+        tr5, tr4, tr3, tr2 = self.Encoder(gray, prev_r, prev_t)
 
-        # c_ref is tr5
-        if fam_ref is None:
-            a_ref = tr5.detach()
+        if prev_fam is None:
+            crt_fam = crt_fam.detach()
         else:
-            a_ref = self.SEFA(tr5.detach(), fam_ref.detach())
-        fake_ab = self.Decoder(a_ref, tr5, tr4, tr3, tr2)
+            crt_fam = self.SEFA(crt_fam.detach(), prev_fam.detach())
+        fake_ab = self.Decoder(crt_fam, tr5, tr4, tr3, tr2)
 
-        return fake_ab
+        return fake_ab, crt_fam
+    
+    # load and print networks; create schedulers
+    def setup(self, opt):
+        if self.isTrain:
+            self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay)
+            
+        self.criterion = HuberLoss(delta=1. / opt.ab_norm)
+            
+        if self.load_P:
+            self.load_state_dict(torch.load(opt.P_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            print('loading Pnet sccess')
+        
+    def calc_loss(self, real, fake):
+        self.fake = fake
+        self.real = real
+        self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
+        self.fake = self.fake.float()
+        loss = self.criterion(self.fake, self.real)
+
+        return loss
