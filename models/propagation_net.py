@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
-
+from torch import optim
 # general libs
 import math
 print('Propagation Network: initialising')
@@ -176,7 +176,7 @@ class Pnet(nn.Module):
             self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay)
             
         self.criterion = HuberLoss(delta=1. / opt.ab_norm)
-            
+        
         if self.load_P:
             self.load_state_dict(torch.load(opt.P_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
             print('loading Pnet sccess')

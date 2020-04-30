@@ -2,7 +2,7 @@ import warnings
 
 class DefaultConfig(object):
     def __init__(self):
-      self.phase = 'I_prev'
+      self.phase = 'Pnet'
       self.gpu_ids = 1
       self.no_prev = False
       self.is_regression = True
@@ -10,9 +10,10 @@ class DefaultConfig(object):
       self.P_path = None
       self.loadSize = 256
       self.fineSize = 224
-      self.batch_size = 32
-      self.batch_size_val = 32
-        
+      self.batch_size = 1
+      self.batch_size_val = 1
+      self.num_frames = 16
+    
       self.isTrain = 'True'
       self.val_freq = 150
       self.print_freq = 20
@@ -39,9 +40,9 @@ class DefaultConfig(object):
       self.dataroot_val = None
         
       self.load_I = True
-      self.I_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/I_auto_ep14_val_2_27.26.pkl'
+      self.I_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I.pkl'
       self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I_lr_0.00001_wd/'
-      self.dataroot = '/home/zhangy23/dataset/coco/'
+      self.dataroot = '/home/zhangy23/dataset/davis/'
 
     def parse(self,kwargs):
 

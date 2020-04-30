@@ -7,16 +7,16 @@ import copy
 
 # my libs
 from utils.utils import *
-from interaction_net import Inet
-from propagation_net import Pnet
+import models.interaction_net as Inet
+import models.propagation_net as Pnet
 
 
 class model():
     def __init__(self, opt):
-        self.model_I = Inet(opt)
-        self.model_P = Pnet(opt)
+        self.model_I = Inet.Inet(opt)
+        self.model_P = Pnet.Pnet(opt)
         self.opt = opt
-        if opt.gpu_ids() is not None:
+        if opt.gpu_ids is not None:
             self.model_I.cuda()
             self.model_P.cuda()
             
@@ -59,12 +59,12 @@ class model():
     def run_propagation(self, data, tr5, target):
         # determine the left and right end
         left_end, right_end = get_ends(data['marks'], target)
-        self.prop_forward(data, target, right_end)
-        self.prop_backward(data, target, left_end)
+        fake_ab, fam = self.prop_forward(data, target, right_end)
+        fake_ab, fam = self.prop_backward(data, target, left_end)
 
         print('[MODEL] Propagation finished.')
         
-        return data
+        return data, fam
 
     def run_interaction(self, gray, clicks, prev):
         clicks = clicks.unsqueeze(0)  # [1, 224, 224, 3]

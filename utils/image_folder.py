@@ -23,6 +23,7 @@ from skimage.color import rgb2lab
 from skimage.io import imread
 from skimage.transform import resize
 from utils.utils import random_crop, random_horizontal_flip
+from joblib import Parallel, delayed
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -34,53 +35,45 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
-def make_dataset(dir):
-    images = []
-    assert os.path.isdir(dir), '%s is not a valid directory' % dir
+def make_dataset(root):
+    videos = []
+    for file in os.listdir(root):
+        path = os.path.join(root, file)
+        if (os.path.isdir(path)):
+            videos.append(path)
 
-    for root, _, fnames in sorted(os.walk(dir)):
-        for fname in fnames:
-            if is_image_file(fname):
-                path = os.path.join(root, fname)
-                images.append(path)
+    return videos
 
-    return images
-
-
-# def default_loader(path, opt):
-#   img = imread(path) # / 255
-#    img = resize(img, [opt.fineSize, opt.fineSize])
-#    img = random_horizontal_flip(img)
-#    return rgb2lab(img) #/ opt.norm_factor
-
-def default_loader(path):
-    return Image.open(path).convert('RGB')
 
 class ImageFolder(data.Dataset):
 
-    def __init__(self, root, transform=None, loader=default_loader):
-        imgs = make_dataset(root)
-        if len(imgs) == 0:
-            raise(RuntimeError("Found 0 images in: " + root + "\n"
-                               "Supported image extensions are: " +
-                               ",".join(IMG_EXTENSIONS)))
+    def __init__(self, root, num_frames, transform=None):
+        videos = make_dataset(root)
+        if len(videos) == 0:
+            raise(RuntimeError("Found 0 videos in: " + root + "\n"))
 
         self.root = root
-        self.imgs = imgs
+        self.videos = videos
         self.transform = transform
-        self.loader = loader
+        self.num_frames = num_frames
 
     def __getitem__(self, index):
-        path = self.imgs[index]
-        img = self.loader(path)
-        if self.transform is not None:
-            img = self.transform(img)
+    
+        path = self.videos[index]
+        start = np.random.randint(0, len(os.listdir(path)) - self.num_frames)
+
+        with Parallel(n_jobs=4) as parallel:
+            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+num_frame))
        
-        return img
+        return torch.stack(output, axis=0)
 
     def __len__(self):
-        return len(self.imgs)
-
+        return len(self.videos)
+    
+    def index_loader(n):
+        path = "%05d.jpg" % n
+        return self.transform(Image.open(root+path).convert('RGB'))
+    
 
 
 

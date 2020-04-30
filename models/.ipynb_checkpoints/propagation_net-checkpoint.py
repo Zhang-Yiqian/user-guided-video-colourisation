@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
-
+from torch import optim
 # general libs
 import math
 print('Propagation Network: initialising')
