@@ -24,6 +24,7 @@ from skimage.io import imread
 from skimage.transform import resize
 from utils.utils import random_crop, random_horizontal_flip
 from joblib import Parallel, delayed
+import torch
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -35,10 +36,10 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
-def make_dataset(dir):
+def make_dataset(root):
     videos = []
-    for file in os.listdir(dir):
-        path = os.path.join(dir, file)
+    for file in os.listdir(root):
+        path = os.path.join(root, file)
         if (os.path.isdir(path)):
             videos.append(path)
 
@@ -50,9 +51,7 @@ class ImageFolder(data.Dataset):
     def __init__(self, root, num_frames, transform=None):
         videos = make_dataset(root)
         if len(videos) == 0:
-            raise(RuntimeError("Found 0 images in: " + root + "\n"
-                               "Supported image extensions are: " +
-                               ",".join(IMG_EXTENSIONS)))
+            raise(RuntimeError("Found 0 videos in: " + root + "\n"))
 
         self.root = root
         self.videos = videos
@@ -61,20 +60,20 @@ class ImageFolder(data.Dataset):
 
     def __getitem__(self, index):
     
-        path = self.videos[index]
-        start = np.random.randint(0, len(os.listdir(path)) - self.num_frames)
+        self.path = self.videos[index]
+        start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames)
 
         with Parallel(n_jobs=4) as parallel:
-            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+num_frame))
-       
+            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+self.num_frames))
+        
         return torch.stack(output, axis=0)
-
+        
     def __len__(self):
         return len(self.videos)
     
-    def index_loader(n):
-        path = "%05d.jpg" % n
-        return self.transform(Image.open(root+path).convert('RGB'))
+    def index_loader(self, n):
+        nfile = "/%05d.jpg" % n
+        return self.transform(Image.open(self.path+nfile).convert('RGB'))
     
 
 

@@ -8,6 +8,8 @@ class DefaultConfig(object):
       self.is_regression = True
       self.load_P = False
       self.P_path = None
+      self.load_IP = False
+      self.IP_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I.pkl'
       self.loadSize = 256
       self.fineSize = 224
       self.batch_size = 1

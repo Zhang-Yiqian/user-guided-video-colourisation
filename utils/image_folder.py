@@ -24,6 +24,7 @@ from skimage.io import imread
 from skimage.transform import resize
 from utils.utils import random_crop, random_horizontal_flip
 from joblib import Parallel, delayed
+import torch
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -59,20 +60,20 @@ class ImageFolder(data.Dataset):
 
     def __getitem__(self, index):
     
-        path = self.videos[index]
-        start = np.random.randint(0, len(os.listdir(path)) - self.num_frames)
+        self.path = self.videos[index]
+        start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames)
 
         with Parallel(n_jobs=4) as parallel:
-            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+num_frame))
-       
+            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+self.num_frames))
+        
         return torch.stack(output, axis=0)
-
+        
     def __len__(self):
         return len(self.videos)
     
-    def index_loader(n):
-        path = "%05d.jpg" % n
-        return self.transform(Image.open(root+path).convert('RGB'))
+    def index_loader(self, n):
+        nfile = "/%05d.jpg" % n
+        return self.transform(Image.open(self.path+nfile).convert('RGB'))
     
 
 

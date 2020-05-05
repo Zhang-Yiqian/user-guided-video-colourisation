@@ -13,7 +13,7 @@ import warnings
 import os
 from utils.utils import *
 import torch
-print('Interaction Network: initialized')
+print('Interaction Network: initialising')
 
 
 class Encoder(nn.Module):
@@ -161,9 +161,9 @@ class Inet(nn.Module):
 
     def forward(self, gray, clicks, prev):
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
-        em_ab = self.Decoder(tr5, tr4, tr3, tr2)
+        fake_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
-        return em_ab, tr5
+        return fake_ab, tr5
 
     # load and print networks; create schedulers
     def setup(self, opt):
@@ -173,13 +173,11 @@ class Inet(nn.Module):
             
         if self.load_I:
             self.load_state_dict(torch.load(self.I_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
-            print('loading Inet sccesses')
+            print('[Interaction net] loading Inet sccesses')
             
     def calc_loss(self, real, fake):
         self.fake = fake
         self.real = real
-        self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
-        self.fake = self.fake.float()
         loss = self.criterion(self.fake, self.real)
 
         return loss

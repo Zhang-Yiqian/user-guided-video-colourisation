@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torchvision import models
 from torch import optim
 # general libs
-import math
+from utils.utils import *
 print('Propagation Network: initialising')
 
 class Encoder(nn.Module):
@@ -51,6 +51,7 @@ class Encoder(nn.Module):
 
         return r5, r4, r3, r2
 
+        
 class ResBlock(nn.Module):
     def __init__(self, indim, outdim=None):
         super(ResBlock, self).__init__()
@@ -98,6 +99,7 @@ class Decoder(nn.Module):
         self.RF2 = Refine(256, mdim) # 1/4 -> 1
         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.opt = opt
+        self.tanh = nn.Tanh()
 
     def forward(self, rr5, r5, r4, r3, r2):
         
@@ -112,7 +114,6 @@ class Decoder(nn.Module):
         out_reg = self.tanh(x)
         return out_reg
 
-        
 class SEFA(nn.Module):
     # Sequeeze-Expectation Feature Aggregation 
     def __init__(self, inplanes, r=4):
@@ -157,9 +158,14 @@ class Pnet(nn.Module):
         self.isTrain = opt.isTrain
         self.load_P = opt.load_P
         self.P_path = opt.P_path
+        self.load_IP = opt.load_IP
+        self.IP_path = opt.IP_path
         self.opt = opt
 
     def forward(self, gray, prev_r, prev_t, crt_fam, prev_fam=None):
+        gray = torch.unsqueeze(gray, 0)
+        prev_r = torch.unsqueeze(prev_r, 0)
+        prev_t = torch.unsqueeze(prev_t, 0)
         tr5, tr4, tr3, tr2 = self.Encoder(gray, prev_r, prev_t)
 
         if prev_fam is None:
@@ -176,16 +182,18 @@ class Pnet(nn.Module):
             self.optimizer = optim.Adam(self.parameters(), lr = opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay)
             
         self.criterion = HuberLoss(delta=1. / opt.ab_norm)
-            
+        
         if self.load_P:
             self.load_state_dict(torch.load(opt.P_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
-            print('loading Pnet sccess')
+            print('[Propagation net] loading Pnet sccesses')
         
+        if self.load_IP:
+            self.load_state_dict(torch.load(self.IP_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            print('[Propagation net] loading Inet sccesses')
+            
     def calc_loss(self, real, fake):
-        self.fake = fake
-        self.real = real
-        self.real = encode_ab_ind(self.real[:, :, ::4, ::4], self.opt)[:, 0, :, :].long()
-        self.fake = self.fake.float()
+        self.fake = torch.unsqueeze(fake, 0)
+        self.real = torch.unsqueeze(real, 0)     
         loss = self.criterion(self.fake, self.real)
 
         return loss

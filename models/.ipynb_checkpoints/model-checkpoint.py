@@ -13,69 +13,75 @@ import models.propagation_net as Pnet
 
 class model():
     def __init__(self, opt):
-        self.model_I = Inet.Inet(opt)
-        self.model_P = Pnet.Pnet(opt)
+        self.Inet = Inet.Inet(opt)
+        self.Pnet = Pnet.Pnet(opt)
         self.opt = opt
         if opt.gpu_ids is not None:
-            self.model_I.cuda()
-            self.model_P.cuda()
+            self.Inet.cuda()
+            self.Pnet.cuda()
             
     def setup(self):
-        self.model_I.setup(self.opt)
-        self.model_P.setup(self.opt)
+        self.Inet.setup(self.opt)
+        self.Pnet.setup(self.opt)
                    
     def train(self):
-        self.model_I.train()
-        self.model_P.train()
+        self.Inet.train()
+        self.Pnet.train()
         
-    def eval(self):
-        self.model_I.eval()
-        self.model_P.eval()          
+    def val(self):
+        self.Inet.eval()
+        self.Pnet.eval()          
 
-    def prop_forward(self, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
+    def prop_forward(self, gray, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
         fam = prev_fam
+        temp_fake = torch.zeros_like(fake_ab)
         for n in range(target+1, end+1):  #[1,2,...,N-1]
             print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
-            fake_ab[n, :, :, :], fam = self.model_P(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
-            if self.model_P.training:
-                loss = self.model_P.calc_loss(real_ab[n, :, :, :], fake_ab[n, :, :, :])
-                model_P.optimizer.zero_grad() 
-                loss.backward() 
-                self.optimizer.step()  
-        return fake_ab, fam
+            temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
+            if self.Pnet.training:
+                loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
+                self.Pnet.optimizer.zero_grad() 
+                loss.backward(retain_graph=True) 
+                self.Pnet.optimizer.step() 
+                self.total_loss += loss.detach().cpu().numpy()
+        return temp_fake, fam
 
-    def prop_backward(self, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
+    def prop_backward(self, gray, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
         fam = prev_fam
+        temp_fake = torch.zeros_like(fake_ab)
         for n in reversed(range(end, target)): #[N-2,N-3,...,0]
             print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
-            fake_ab[n, :, :, :], fam = self.model_P(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n+1, :, :, :], crt_fam, prev_fam)
-            if self.model_P.training:
-                loss = self.model_P.calc_loss(real_ab[n, :, :, :], fake_ab[n, :, :, :])
-                model_P.optimizer.zero_grad() 
-                loss.backward() 
-                self.optimizer.step()  
-        return fake_ab, fam
+            temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n+1, :, :, :], crt_fam, prev_fam)
+            if self.Pnet.training:
+                loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
+                self.Pnet.optimizer.zero_grad() 
+                loss.backward(retain_graph=True) 
+                self.Pnet.optimizer.step()  
+                self.total_loss += loss.detach().cpu().numpy()
+        return temp_fake, fam
         
-    def run_propagation(self, data, tr5, target):
+    def run_propagation(self, data, target, crt_fam, prev_fam=None):
         # determine the left and right end
+        self.total_loss = 0
         left_end, right_end = get_ends(data['marks'], target)
-        fake_ab, fam = self.prop_forward(data, target, right_end)
-        fake_ab, fam = self.prop_backward(data, target, left_end)
-
+        fake_ab, fam = self.prop_forward(data['gray'], data['prev'], data['ab'], target, right_end, crt_fam, prev_fam)
+        fake_ab, fam = self.prop_backward(data['gray'], data['prev'], data['ab'], target, left_end, crt_fam, prev_fam)
+        
         print('[MODEL] Propagation finished.')
         
-        return data, fam
+        return fake_ab, fam
 
-    def run_interaction(self, gray, clicks, prev):
+    def run_interaction(self, gray, clicks, prev, target=None):
         clicks = clicks.unsqueeze(0)  # [1, 224, 224, 3]
         gray = gray.unsqueeze(0)    # [1, 224, 224, 1]
-        print('[MODEL: interaction network] User Interaction')   
+        prev = prev.unsqueeze(0)    # [1, 224, 224, 2]
+        print('[MODEL: interaction network] User Interaction on ' + str(target))   
         
-        return self.model_I(gray, clicks, prev) 
+        return self.Inet(gray, clicks, prev) 
 
     def run_auto_colour(self, data):
         
-        return self.model_I(data['gray'], data['clicks'], data['prev'])
+        return self.Inet(data['gray'], data['clicks'], data['prev'])
         
         
         

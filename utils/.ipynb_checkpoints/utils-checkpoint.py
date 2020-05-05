@@ -18,7 +18,7 @@ def ToCuda(data_cpu):
         try:
             data[key] = data_cpu[key].float().cuda()
         except:
-            pass
+            data[key] = data_cpu[key]
     return data
 
 def ToCPU(data_cuda):
@@ -163,6 +163,7 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
     data_lab = rgb2lab(data_raw, opt)
     data['gray'] = data_lab[:,[0,],:,:]
     data['ab'] = data_lab[:,1:,:,:]
+    data['marks'] = np.zeros(data_lab.shape[0])
     # data['prev'] = torch.zeros_like(data['ab'])
     if(ab_thresh > 0): # mask out grayscale images
         thresh = 1.*ab_thresh/opt.ab_norm
@@ -358,55 +359,6 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     else:
         return psnr.cpu().numpy()
 
-def vifp_mscale(ref, dist):
-    sigma_nsq=2
-    eps = 1e-10
-
-    num = 0.0
-    den = 0.0
-    for scale in range(1, 5):
-       
-        N = 2**(4-scale+1) + 1
-        sd = N/5.0
-
-        if (scale > 1):
-            ref = scipy.ndimage.gaussian_filter(ref, sd)
-            dist = scipy.ndimage.gaussian_filter(dist, sd)
-            ref = ref[::2, ::2]
-            dist = dist[::2, ::2]
-                
-        mu1 = scipy.ndimage.gaussian_filter(ref, sd)
-        mu2 = scipy.ndimage.gaussian_filter(dist, sd)
-        mu1_sq = mu1 * mu1
-        mu2_sq = mu2 * mu2
-        mu1_mu2 = mu1 * mu2
-        sigma1_sq = scipy.ndimage.gaussian_filter(ref * ref, sd) - mu1_sq
-        sigma2_sq = scipy.ndimage.gaussian_filter(dist * dist, sd) - mu2_sq
-        sigma12 = scipy.ndimage.gaussian_filter(ref * dist, sd) - mu1_mu2
-        
-        sigma1_sq[sigma1_sq<0] = 0
-        sigma2_sq[sigma2_sq<0] = 0
-        
-        g = sigma12 / (sigma1_sq + eps)
-        sv_sq = sigma2_sq - g * sigma12
-        
-        g[sigma1_sq<eps] = 0
-        sv_sq[sigma1_sq<eps] = sigma2_sq[sigma1_sq<eps]
-        sigma1_sq[sigma1_sq<eps] = 0
-        
-        g[sigma2_sq<eps] = 0
-        sv_sq[sigma2_sq<eps] = 0
-        
-        sv_sq[g<0] = sigma2_sq[g<0]
-        g[g<0] = 0
-        sv_sq[sv_sq<=eps] = eps
-        
-        num += np.sum(np.log10(1 + g * g * sigma1_sq / (sv_sq + sigma_nsq)))
-        den += np.sum(np.log10(1 + sigma1_sq / sigma_nsq))
-        
-    vifp = num/den
-
-    return vifp
 
 def get_ends(marks, target):
     
@@ -414,19 +366,6 @@ def get_ends(marks, target):
     target_idx = np.squeeze(np.argwhere(inter_list == target))
     num_frames = marks.size
     
-#    if target == num_frames - 1:
-#        right_end = None
-#        if target_idx > 0:
-#            left_end = inter_list[target_idx-1]
-#        else:
-#            left_end = 0
-#    elif target == 0:
-#        left_end = None
-#        if target_idx < inter_list.size - 1:
-#            right_end = inter_list[target_idx+1]
-#        else:
-#            right_end = num_frames - 1
-#    else:
     if target_idx > 0:
         left_end = inter_list[target_idx-1] + 1
     else:
@@ -439,6 +378,8 @@ def get_ends(marks, target):
     
     return left_end, right_end
     
-    
+def argmax_l2(fake, real):
+    l2_dist = torch.sum(torch.sum(torch.sum(torch.pow(real-fake, 2), dim=1), dim=1), dim=1)
+    return torch.argmax(l2_dist).numpy()
     
     
