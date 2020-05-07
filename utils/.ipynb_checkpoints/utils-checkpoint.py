@@ -158,13 +158,12 @@ def lab2rgb(lab_rs, opt):
         # embed()
     return out
     
-def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_points=None):
+def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, marks=None, num_points=None):
     data = {}
     data_lab = rgb2lab(data_raw, opt)
     data['gray'] = data_lab[:,[0,],:,:]
     data['ab'] = data_lab[:,1:,:,:]
-    data['marks'] = np.zeros(data_lab.shape[0])
-    # data['prev'] = torch.zeros_like(data['ab'])
+    data['marks'] = marks
     if(ab_thresh > 0): # mask out grayscale images
         thresh = 1.*ab_thresh/opt.ab_norm
         mask = torch.sum(torch.abs(torch.max(torch.max(data['ab'],dim=3)[0],dim=2)[0]-torch.min(torch.min(data['ab'],dim=3)[0],dim=2)[0]),dim=1) >= thresh
@@ -177,12 +176,13 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, num_po
     if prev is not None:
         data['prev'] = prev
         samp='l2'
-        # data['prev'] = torch.zeros_like(data['ab'])
+
     else:
         data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
         data['clicks'] = torch.zeros([N, C+1, H, W])
         # data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
+        data['marks'] = np.zeros(data_lab.shape[0])
         samp='normal'
         return data
     
@@ -345,12 +345,6 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     real_rgb = lab2rgb(real_img, opt)
     fake_rgb[fake_rgb > 1] = 1.0
     for idx in range(lightness.shape[0]):
-        # print(lightness[idx,:,:,:].shape, fake_ab.shape)
-        # fake_img = torch.cat((lightness[idx,:,:,:], fake_ab[idx,:,:,:]), 0) 
-        # real_img = torch.cat((lightness[idx,:,:,:], real_ab[idx,:,:,:]), 0) 
-        # fake_rgb = lab2rgb(torch.unsqueeze(fake_img, 0), opt)[0, :, :, :]
-        # real_rgb = lab2rgb(torch.unsqueeze(real_img, 0), opt)[0, :, :, :]
-        
         mse = torch.mean( (fake_rgb[idx, :, :, :] - real_rgb[idx, :, :, :]) ** 2 )
         psnr += 10 * torch.log10(1.0 / mse)  
         

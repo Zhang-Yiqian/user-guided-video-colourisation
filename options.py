@@ -17,10 +17,10 @@ class DefaultConfig(object):
       self.num_frames = 16
     
       self.isTrain = 'True'
-      self.val_freq = 150
-      self.print_freq = 20
+      self.val_freq = 50
+      self.print_freq = 1
       self.epoch_count = 10
-      self.lr = 0.00001
+      self.lr = 0.0001
       self.beta1 = 0.9
       self.niter = 15
       self.epoch_count = 0
@@ -40,10 +40,10 @@ class DefaultConfig(object):
       self.seed = 2020
       self.dataroot_train = None
       self.dataroot_val = None
-        
+    
       self.load_I = True
       self.I_path = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I.pkl'
-      self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prev_I_lr_0.00001_wd/'
+      self.save_root = '/home/zhangy23/github/user-guided-video-colourisation/snapshot/prop_lr_0.001/'
       self.dataroot = '/home/zhangy23/dataset/davis/'
 
     def parse(self,kwargs):
