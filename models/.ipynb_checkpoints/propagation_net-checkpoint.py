@@ -192,8 +192,8 @@ class Pnet(nn.Module):
             print('[Propagation net] loading Inet sccesses')
             
     def calc_loss(self, real, fake):
-        self.fake = torch.unsqueeze(fake, 0)
-        self.real = torch.unsqueeze(real, 0)     
-        loss = self.criterion(self.fake, self.real)
+        # self.fake = torch.unsqueeze(fake, 0)
+        # self.real = torch.unsqueeze(real, 0)     
+        loss = self.criterion(fake, real)
 
         return loss

@@ -23,7 +23,17 @@ class model():
     def setup(self):
         self.Inet.setup(self.opt)
         self.Pnet.setup(self.opt)
-                   
+        
+        # load encoder weights
+        Inet_dec_keys = list(self.Inet.state_dict().keys())
+        Inet_dec_dict = self.Inet.state_dict()
+        Pnet_dec_keys = list(self.Pnet.state_dict().keys())
+        Pnet_dec_dict = self.Pnet.state_dict().copy()
+        for key in Pnet_dec_keys:
+            if key in Inet_dec_keys:
+                Pnet_dec_dict[key] = Inet_dec_dict[key]
+        self.Pnet.load_state_dict(Pnet_dec_dict)
+        
     def train(self):
         self.Inet.train()
         self.Pnet.train()
@@ -34,9 +44,9 @@ class model():
 
     def prop_forward(self, gray, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
         fam = prev_fam
-        temp_fake = torch.zeros_like(fake_ab)
+        temp_fake = fake_ab.clone()
         for n in range(target+1, end+1): 
-            print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
+            #print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
             temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
@@ -48,9 +58,9 @@ class model():
 
     def prop_backward(self, gray, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
         fam = prev_fam
-        temp_fake = torch.zeros_like(fake_ab)
+        temp_fake = fake_ab.clone()
         for n in reversed(range(end, target)):
-            print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
+            #print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
             temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n+1, :, :, :], crt_fam, prev_fam)
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
@@ -64,12 +74,12 @@ class model():
         # determine the left and right end
         self.total_loss = 0
         left_end, right_end = get_ends(data['marks'], target)
-        fake_ab, fam = self.prop_forward(data['gray'], data['prev'], data['ab'], target, right_end, crt_fam, prev_fam)
-        fake_ab, fam = self.prop_backward(data['gray'], data['prev'], data['ab'], target, left_end, crt_fam, prev_fam)
+        data['prev'], fam = self.prop_forward(data['gray'], data['prev'], data['ab'], target, right_end, crt_fam, prev_fam)
+        data['prev'], fam = self.prop_backward(data['gray'], data['prev'], data['ab'], target, left_end, crt_fam, prev_fam)
         
         print('[MODEL] Propagation finished.')
         
-        return fake_ab, fam
+        return data['prev'], fam
 
     def run_interaction(self, gray, clicks, prev, target=None):
         clicks = clicks.unsqueeze(0)  # [1, 224, 224, 3]

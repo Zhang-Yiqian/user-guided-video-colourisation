@@ -17,7 +17,7 @@ class DefaultConfig(object):
       self.num_frames = 16
     
       self.isTrain = 'True'
-      self.val_freq = 50
+      self.val_freq = 15
       self.print_freq = 1
       self.epoch_count = 10
       self.lr = 0.0001
