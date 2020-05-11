@@ -89,23 +89,54 @@ class Refine(nn.Module):
         m = self.ResMM(m)
         return m
 
+# class Decoder(nn.Module):
+#     def __init__(self, mdim, opt):
+#         super(Decoder, self).__init__()
+#         self.ResFM1 = ResBlock(4096, 1024)
+#         self.ResFM2= ResBlock(1024, mdim)
+#         self.RF4 = Refine(1024, mdim) # 1/16 -> 1/8
+#         self.RF3 = Refine(512, mdim) # 1/8 -> 1/4
+#         self.RF2 = Refine(256, mdim) # 1/4 -> 1
+#         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
+#         self.opt = opt
+#         self.tanh = nn.Tanh()
+
+#     def forward(self, rr5, r5, r4, r3, r2):
+        
+#         x = torch.cat([rr5, r5], dim=1)
+#         x = self.ResFM1(x)   
+#         x = self.ResFM2(x)
+#         x = self.RF4(r4, x)  # out: 1/16, 256
+#         x = self.RF3(r3, x)  # out: 1/8, 256
+#         x = self.RF2(r2, x)  # out: 1/4, 256
+#         x = self.pred2(F.relu(x))
+#         x = F.interpolate(x, scale_factor=4, mode='bilinear')
+#         out_reg = self.tanh(x)
+#         return out_reg
+
 class Decoder(nn.Module):
     def __init__(self, mdim, opt):
         super(Decoder, self).__init__()
-        self.ResFM1 = ResBlock(4096, 1024)
-        self.ResFM2= ResBlock(1024, mdim)
-        self.RF4 = Refine(1024, mdim) # 1/16 -> 1/8
-        self.RF3 = Refine(512, mdim) # 1/8 -> 1/4
-        self.RF2 = Refine(256, mdim) # 1/4 -> 1
-        self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.opt = opt
+        self.ResFM = ResBlock(2048, mdim)
+        self.RF4 = Refine(1024, mdim)  # 1/16 -> 1/8
+        self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
+        self.RF2 = Refine(256, mdim)   # 1/4 -> 1
+        self.pred1 = nn.Conv2d(mdim, 529, kernel_size=(1,1), padding=(0, 0), stride=1)
+        self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.tanh = nn.Tanh()
+        
+        for m in self.modules():
+          if isinstance(m, nn.Conv2d):
+              nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
+              if m.bias is not None:
+                  nn.init.normal_(m.bias.data)
+          elif isinstance(m, nn.BatchNorm2d):
+              nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
+              m.bias.data.zero_()
 
     def forward(self, rr5, r5, r4, r3, r2):
-        
-        x = torch.cat([rr5, r5], dim=1)
-        x = self.ResFM1(x)   
-        x = self.ResFM2(x)
+        x = self.ResFM(r5)
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
         x = self.RF2(r2, x)  # out: 1/4, 256
@@ -114,6 +145,7 @@ class Decoder(nn.Module):
         out_reg = self.tanh(x)
         return out_reg
 
+    
 class SEFA(nn.Module):
     # Sequeeze-Expectation Feature Aggregation 
     def __init__(self, inplanes, r=4):
@@ -173,7 +205,7 @@ class Pnet(nn.Module):
         else:
             crt_fam = self.SEFA(crt_fam.detach(), prev_fam.detach())
         fake_ab = self.Decoder(crt_fam, tr5, tr4, tr3, tr2)
-
+        
         return fake_ab, crt_fam
     
     # load and print networks; create schedulers

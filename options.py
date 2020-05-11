@@ -20,12 +20,12 @@ class DefaultConfig(object):
       self.val_freq = 15
       self.print_freq = 1
       self.epoch_count = 10
-      self.lr = 0.0001
+      self.lr = 0.00001
       self.beta1 = 0.9
       self.niter = 15
       self.epoch_count = 0
       self.niter_decay = 0
-      self.weight_decay = 0.001
+      self.weight_decay = 0.00
       self.sample_p = 0.125
       self.l_norm = 100.0
       self.l_cent = 50.0

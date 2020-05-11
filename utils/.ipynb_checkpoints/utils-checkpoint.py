@@ -262,10 +262,10 @@ def save_model(model, opt, epoch, model_index, psnr):
         warnings.warn("The model file already exits!", Warning)
     if opt.gpu_ids is not None:
         model.cpu()
-        torch.save(model, file_name)
+        torch.save(model.state_dict(), file_name)
         model.cuda()
     else:
-        torch.save(model, file_name)
+        torch.save(model.state_dict(), file_name)
 
 def encode_ab_ind(data_ab, opt):
     # Encode ab value into an index

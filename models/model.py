@@ -46,12 +46,12 @@ class model():
         fam = prev_fam
         temp_fake = fake_ab.clone()
         for n in range(target+1, end+1): 
-            #print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
+            print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
             temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
                 self.Pnet.optimizer.zero_grad() 
-                loss.backward(retain_graph=True) 
+                loss.backward() 
                 self.Pnet.optimizer.step() 
             self.total_loss += loss.detach().cpu().numpy()
         return temp_fake, fam
@@ -60,12 +60,12 @@ class model():
         fam = prev_fam
         temp_fake = fake_ab.clone()
         for n in reversed(range(end, target)):
-            #print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
+            print('[MODEL: propagation network] {} to {} <<<<<<<<<'.format(n+1, n))
             temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n+1, :, :, :], crt_fam, prev_fam)
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
                 self.Pnet.optimizer.zero_grad() 
-                loss.backward(retain_graph=True) 
+                loss.backward() 
                 self.Pnet.optimizer.step()  
             self.total_loss += loss.detach().cpu().numpy()
         return temp_fake, fam
@@ -76,7 +76,12 @@ class model():
         left_end, right_end = get_ends(data['marks'], target)
         data['prev'], fam = self.prop_forward(data['gray'], data['prev'], data['ab'], target, right_end, crt_fam, prev_fam)
         data['prev'], fam = self.prop_backward(data['gray'], data['prev'], data['ab'], target, left_end, crt_fam, prev_fam)
-        
+#         loss = self.Pnet.calc_loss(data['ab'], data['prev'])
+#         if self.Pnet.training:
+#             self.Pnet.optimizer.zero_grad() 
+#             loss.backward() 
+#             self.Pnet.optimizer.step()  
+#         self.total_loss = loss.detach().cpu().numpy()
         print('[MODEL] Propagation finished.')
         
         return data['prev'], fam
