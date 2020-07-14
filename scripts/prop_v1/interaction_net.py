@@ -163,7 +163,7 @@ class Inet(nn.Module):
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
         fake_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
-        return fake_ab
+        return fake_ab, tr5
 
     # load and print networks; create schedulers
     def setup(self, opt):

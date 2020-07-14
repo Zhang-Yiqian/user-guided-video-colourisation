@@ -180,7 +180,7 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, marks=
     else:
         data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
-        data['clicks'] = torch.zeros([N, C+1, H, W])
+        # data['clicks'] = torch.zeros([N, C+1, H, W])
         # data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
         data['marks'] = np.zeros(data_lab.shape[0])
         samp='normal'
@@ -333,9 +333,9 @@ def decode_mean(data_ab_quant, opt):
 
 def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     psnr = 0
-    if not opt.is_regression:
-        fake_ab = decode_max_ab(fake_ab, opt)
-        fake_ab = F.interpolate(fake_ab, scale_factor=4)
+    if lightness.ndim == 3:
+        lightness = torch.unsqueeze(lightness, 0)
+        real_ab = torch.unsqueeze(real_ab, 0)
     lightness = lightness.cpu()
     fake_ab = fake_ab.cpu()
     real_ab = real_ab.cpu()

@@ -333,9 +333,9 @@ def decode_mean(data_ab_quant, opt):
 
 def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     psnr = 0
-    if not opt.is_regression:
-        fake_ab = decode_max_ab(fake_ab, opt)
-        fake_ab = F.interpolate(fake_ab, scale_factor=4)
+    if lightness.ndim == 3:
+        lightness = torch.unsqueeze(lightness, 0)
+        real_ab = torch.unsqueeze(real_ab, 0)
     lightness = lightness.cpu()
     fake_ab = fake_ab.cpu()
     real_ab = real_ab.cpu()

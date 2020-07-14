@@ -25,6 +25,8 @@ from skimage.transform import resize
 from utils.utils import random_crop, random_horizontal_flip
 from joblib import Parallel, delayed
 import torch
+import random
+import copy
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -42,7 +44,7 @@ def make_dataset(root):
         path = os.path.join(root, file)
         if (os.path.isdir(path)):
             videos.append(path)
-
+        
     return videos
 
 
@@ -52,7 +54,7 @@ class ImageFolder(data.Dataset):
         videos = make_dataset(root)
         if len(videos) == 0:
             raise(RuntimeError("Found 0 videos in: " + root + "\n"))
-
+        
         self.root = root
         self.videos = videos
         self.transform = transform
@@ -61,18 +63,31 @@ class ImageFolder(data.Dataset):
     def __getitem__(self, index):
     
         self.path = self.videos[index]
-        start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames)
-
-        with Parallel(n_jobs=4) as parallel:
-            output = parallel(delayed(self.index_loader)(i) for i in range(start, start+self.num_frames))
+        try:
+            start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames)
+        except:
+            start = 0
         
-        return torch.stack(output, axis=0)
+        idx_list = list(range(start, start+self.num_frames))
+        l1 = copy.deepcopy(idx_list)
+        l2 = copy.deepcopy(idx_list)
+        random.shuffle(l1)
+        random.shuffle(l2)
+        
+        with Parallel(n_jobs=6) as parallel:
+            output1 = parallel(delayed(self.index_loader)(i) for i in l1)
+        
+        with Parallel(n_jobs=6) as parallel:
+            output2 = parallel(delayed(self.index_loader)(i) for i in l2)
+        
+        return torch.stack(output1, axis=0), torch.stack(output2, axis=0)
         
     def __len__(self):
         return len(self.videos)
-    
+        
     def index_loader(self, n):
         nfile = "/%05d.jpg" % n
+        
         return self.transform(Image.open(self.path+nfile).convert('RGB'))
     
 

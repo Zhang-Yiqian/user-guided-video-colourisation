@@ -44,14 +44,15 @@ class model():
 
     def prop_forward(self, gray, fake_ab, real_ab, target, end, crt_fam, prev_fam=None):
         fam = prev_fam
-        temp_fake = fake_ab.clone()
+        temp_fake = fake_ab.detach().clone()
         for n in range(target+1, end+1): 
             print('[MODEL: propagation network] >>>>>>>>> {} to {}'.format(n-1, n))
-            temp_fake[n, :, :, :], fam = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
+            temp_fake[n, :, :, :], fam_ = self.Pnet(gray[n, :, :, :], fake_ab[n, :, :, :], fake_ab[n-1, :, :, :], crt_fam, prev_fam)
+            fam = fam_.detach()
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
                 self.Pnet.optimizer.zero_grad() 
-                loss.backward() 
+                loss.backward(retain_graph=True) 
                 self.Pnet.optimizer.step() 
             self.total_loss += loss.detach().cpu().numpy()
         return temp_fake, fam
@@ -65,7 +66,7 @@ class model():
             loss = self.Pnet.calc_loss(real_ab[n, :, :, :], temp_fake[n, :, :, :])
             if self.Pnet.training:
                 self.Pnet.optimizer.zero_grad() 
-                loss.backward() 
+                loss.backward(retain_graph=True) 
                 self.Pnet.optimizer.step()  
             self.total_loss += loss.detach().cpu().numpy()
         return temp_fake, fam

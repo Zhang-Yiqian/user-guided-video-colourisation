@@ -9,8 +9,8 @@ Created on Wed Mar 11 17:42:01 2020
 import os
 import shutil
 import random
-src = "/home/zhangy23/dataset/coco/val/" 
-dst = "/home/zhangy23/dataset/coco/subval/"
+src = "/home/zhangy23/dataset/coco/" 
+dst = "/home/zhangy23/dataset/coco/"
 train_dst = dst + "train/"
 val_dst = dst + "val/"
 test_dst = dst + "test/"
@@ -32,6 +32,36 @@ for f in test:
 
 for f in val:
     shutil.copyfile(src+f, val_dst+f)
+    
+import os
+def make_dataset(root):
+    videos = []
+    for file in os.listdir(root):
+        path = os.path.join(root, file)
+        if (os.path.isdir(path)):
+            videos.append(path)
+
+    return videos
+
+
+root = '/Users/zhangyiqian/Downloads/valid/JPEGImages/'
+videos = make_dataset(root)
+
+for v in videos:
+    i = 0
+    frames = os.listdir(v)
+    for n in range(100):
+        nfile = "/%05d.jpg" % (n*5)
+        old_name = v + '/' + nfile
+        if os.path.exists(old_name):
+            #print('yes')
+            new_name = v + '/' + "/%05d.jpg" % i
+            os.rename(old_name, new_name)
+            i += 1 
+            
+            
+            
+    
     
     
     

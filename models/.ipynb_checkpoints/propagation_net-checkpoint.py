@@ -39,8 +39,8 @@ class Encoder(nn.Module):
         self.res5 = resnet.layer4  # 1/32, 2048
 
     def forward(self, gray, prev_r, prev_t):
-        
-        x = self.conv1_gray(gray) + self.conv1_prev_r(prev_r) + self.conv1_prev_t(prev_t)
+        m = self.conv1_prev_r(prev_r).detach()
+        x = self.conv1_gray(gray) + self.conv1_prev_t(prev_t) + m
         x = self.bn1(x)
         c1 = self.relu(x)   # 1/2, 64
         x = self.maxpool(c1)  # 1/4, 64
@@ -92,20 +92,26 @@ class Refine(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, mdim, opt):
         super(Decoder, self).__init__()
-        self.ResFM1 = ResBlock(4096, 1024)
-        self.ResFM2= ResBlock(1024, mdim)
-        self.RF4 = Refine(1024, mdim) # 1/16 -> 1/8
-        self.RF3 = Refine(512, mdim) # 1/8 -> 1/4
-        self.RF2 = Refine(256, mdim) # 1/4 -> 1
-        self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.opt = opt
+        self.ResFM = ResBlock(2048, mdim)
+        self.RF4 = Refine(1024, mdim)  # 1/16 -> 1/8
+        self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
+        self.RF2 = Refine(256, mdim)   # 1/4 -> 1
+        self.pred1 = nn.Conv2d(mdim, 529, kernel_size=(1,1), padding=(0, 0), stride=1)
+        self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
         self.tanh = nn.Tanh()
-
-    def forward(self, rr5, r5, r4, r3, r2):
         
-        x = torch.cat([rr5, r5], dim=1)
-        x = self.ResFM1(x)   
-        x = self.ResFM2(x)
+        for m in self.modules():
+          if isinstance(m, nn.Conv2d):
+              nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
+              if m.bias is not None:
+                  nn.init.normal_(m.bias.data)
+          elif isinstance(m, nn.BatchNorm2d):
+              nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
+              m.bias.data.zero_()
+
+    def forward(self, r5, r4, r3, r2):
+        x = self.ResFM(r5)
         x = self.RF4(r4, x)  # out: 1/16, 256
         x = self.RF3(r3, x)  # out: 1/8, 256
         x = self.RF2(r2, x)  # out: 1/4, 256
@@ -113,57 +119,6 @@ class Decoder(nn.Module):
         x = F.interpolate(x, scale_factor=4, mode='bilinear')
         out_reg = self.tanh(x)
         return out_reg
-
-# class Decoder(nn.Module):
-#     def __init__(self, mdim, opt):
-#         super(Decoder, self).__init__()
-#         self.opt = opt
-#         self.ResFM = ResBlock(2048, mdim)
-#         self.RF4 = Refine(1024, mdim)  # 1/16 -> 1/8
-#         self.RF3 = Refine(512, mdim)   # 1/8 -> 1/4
-#         self.RF2 = Refine(256, mdim)   # 1/4 -> 1
-#         self.pred1 = nn.Conv2d(mdim, 529, kernel_size=(1,1), padding=(0, 0), stride=1)
-#         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
-#         self.tanh = nn.Tanh()
-        
-#         for m in self.modules():
-#           if isinstance(m, nn.Conv2d):
-#               nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
-#               if m.bias is not None:
-#                   nn.init.normal_(m.bias.data)
-#           elif isinstance(m, nn.BatchNorm2d):
-#               nn.init.kaiming_normal_(m.weight.data, nonlinearity='relu')
-#               m.bias.data.zero_()
-
-#     def forward(self, rr5, r5, r4, r3, r2):
-#         x = self.ResFM(r5)
-#         x = self.RF4(r4, x)  # out: 1/16, 256
-#         x = self.RF3(r3, x)  # out: 1/8, 256
-#         x = self.RF2(r2, x)  # out: 1/4, 256
-#         x = self.pred2(F.relu(x))
-#         x = F.interpolate(x, scale_factor=4, mode='bilinear')
-#         out_reg = self.tanh(x)
-#         return out_reg
-
-    
-class SEFA(nn.Module):
-    # Sequeeze-Expectation Feature Aggregation 
-    def __init__(self, inplanes, r=4):
-        super(SEFA, self).__init__()
-        self.inplanes = inplanes
-        self.fc1 = nn.Linear(2*inplanes, int(2*inplanes/r))
-        self.fc2 = nn.Linear(int(2*inplanes/r), 2*inplanes)
-
-    def forward(self, x1, x2):
-        x = torch.cat([x1, x2], dim=1)
-        x = x.mean(-1).mean(-1) # global pool # 2048*2
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)  # b, 4096 
-        x = F.softmax(x.view(-1, self.inplanes, 2), dim=2)
-        w1 = x[:,:,0].contiguous().view(-1, self.inplanes, 1, 1)
-        w2 = x[:,:,1].contiguous().view(-1, self.inplanes, 1, 1)
-        out = x1*w1 + x2*w2 
-        return out
 
 class HuberLoss(nn.Module):
     def __init__(self, delta=.01):
@@ -185,7 +140,6 @@ class Pnet(nn.Module):
         super(Pnet, self).__init__()
         mdim = 228
         self.Encoder = Encoder() # inputs:: ref: rf, rm / tar: tf, tm 
-        self.SEFA = SEFA(2048, r=2)
         self.Decoder = Decoder(mdim, opt) # input: m5, r4, r3, r2 >> p
         self.isTrain = opt.isTrain
         self.load_P = opt.load_P
@@ -194,19 +148,14 @@ class Pnet(nn.Module):
         self.IP_path = opt.IP_path
         self.opt = opt
 
-    def forward(self, gray, prev_r, prev_t, crt_fam, prev_fam=None):
-        gray = torch.unsqueeze(gray, 0)
-        prev_r = torch.unsqueeze(prev_r, 0)
-        prev_t = torch.unsqueeze(prev_t, 0)
+    def forward(self, gray, prev_r, prev_t):
+        #gray = torch.unsqueeze(gray, 0)
+        #prev_r = torch.unsqueeze(prev_r, 0)
+        #prev_t = torch.unsqueeze(prev_t, 0)
         tr5, tr4, tr3, tr2 = self.Encoder(gray, prev_r, prev_t)
-
-        if prev_fam is None:
-            crt_fam = crt_fam.detach()
-        else:
-            crt_fam = self.SEFA(crt_fam.detach(), prev_fam.detach())
-        fake_ab = self.Decoder(crt_fam, tr5, tr4, tr3, tr2)
+        fake_ab = self.Decoder( tr5, tr4, tr3, tr2)
         
-        return fake_ab, crt_fam
+        return fake_ab
     
     # load and print networks; create schedulers
     def setup(self, opt):
@@ -216,7 +165,7 @@ class Pnet(nn.Module):
         self.criterion = HuberLoss(delta=1. / opt.ab_norm)
         
         if self.load_P:
-            self.load_state_dict(torch.load(opt.P_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            self.load_state_dict(torch.load(opt.P_path, map_location='cuda:'+str(opt.gpu_ids)))
             print('[Propagation net] loading Pnet sccesses')
         
         if self.load_IP:
@@ -224,8 +173,8 @@ class Pnet(nn.Module):
             print('[Propagation net] loading Inet sccesses')
             
     def calc_loss(self, real, fake):
-        # self.fake = torch.unsqueeze(fake, 0)
-        # self.real = torch.unsqueeze(real, 0)     
+        self.fake = torch.unsqueeze(fake, 0)
+        self.real = torch.unsqueeze(real, 0)     
         loss = self.criterion(fake, real)
 
         return loss
