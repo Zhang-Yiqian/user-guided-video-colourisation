@@ -151,7 +151,8 @@ class HuberLoss(nn.Module):
 class Inet(nn.Module):
     def __init__(self, opt):
         super(Inet, self).__init__()
-        mdim = 228
+        # mdim = 228
+        mdim = 256
         self.Encoder = Encoder(opt)      # inputs: ref: rf, rm / tar: tf, tm
         self.Decoder = Decoder(mdim, opt)  # input: m5, r4, r3, r2 >> p
         self.opt = opt
@@ -160,6 +161,9 @@ class Inet(nn.Module):
         self.I_path = opt.I_path
 
     def forward(self, gray, clicks, prev):
+        #gray = torch.unsqueeze(gray, 0)
+        #clicks = torch.unsqueeze(clicks, 0)
+        #prev = torch.unsqueeze(prev, 0)
         tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
         fake_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
@@ -172,7 +176,8 @@ class Inet(nn.Module):
         self.criterion = HuberLoss(delta=1. / opt.ab_norm)
             
         if self.load_I:
-            self.load_state_dict(torch.load(self.I_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            # self.load_state_dict(torch.load(self.I_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
+            self.load_state_dict(torch.load(self.I_path))
             print('[Interaction net] loading Inet sccesses')
             
     def calc_loss(self, real, fake):

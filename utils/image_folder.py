@@ -69,18 +69,19 @@ class ImageFolder(data.Dataset):
             start = 0
         
         idx_list = list(range(start, start+self.num_frames))
-        l1 = copy.deepcopy(idx_list)
-        l2 = copy.deepcopy(idx_list)
-        random.shuffle(l1)
-        random.shuffle(l2)
+        # l1 = copy.deepcopy(idx_list)
+        # l2 = copy.deepcopy(idx_list)
+        # random.shuffle(l1)
+        # random.shuffle(l2)
+        with Parallel(n_jobs=4) as parallel:
+            output1 = parallel(delayed(self.index_loader)(i) for i in idx_list)
+        # with Parallel(n_jobs=6) as parallel:
+        #    output1 = parallel(delayed(self.index_loader)(i) for i in l1)
         
-        with Parallel(n_jobs=6) as parallel:
-            output1 = parallel(delayed(self.index_loader)(i) for i in l1)
-        
-        with Parallel(n_jobs=6) as parallel:
-            output2 = parallel(delayed(self.index_loader)(i) for i in l2)
-        
-        return torch.stack(output1, axis=0), torch.stack(output2, axis=0)
+        # with Parallel(n_jobs=6) as parallel:
+        #     output2 = parallel(delayed(self.index_loader)(i) for i in l2)
+        return torch.stack(output1, axis=0)
+        # return torch.stack(output1, axis=0), torch.stack(output2, axis=0)
         
     def __len__(self):
         return len(self.videos)

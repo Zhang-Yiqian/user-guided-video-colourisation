@@ -180,7 +180,7 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, marks=
     else:
         data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
-        # data['clicks'] = torch.zeros([N, C+1, H, W])
+        data['clicks'] = torch.zeros([N, C+1, H, W])
         # data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
         data['marks'] = np.zeros(data_lab.shape[0])
         samp='normal'
@@ -332,7 +332,8 @@ def decode_mean(data_ab_quant, opt):
     return data_ab_inf
 
 def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
-    psnr = 0
+    # psnr = 0
+    psnr = []
     if lightness.ndim == 3:
         lightness = torch.unsqueeze(lightness, 0)
         real_ab = torch.unsqueeze(real_ab, 0)
@@ -346,12 +347,12 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     fake_rgb[fake_rgb > 1] = 1.0
     for idx in range(lightness.shape[0]):
         mse = torch.mean( (fake_rgb[idx, :, :, :] - real_rgb[idx, :, :, :]) ** 2 )
-        psnr += 10 * torch.log10(1.0 / mse)  
+        psnr.append((10 * torch.log10(1.0 / mse)).cpu().numpy())
         
     if avg:
-        return (psnr / lightness.shape[0]).cpu().numpy()
+        return sum(psnr)/len(psnr)
     else:
-        return psnr.cpu().numpy()
+        return psnr
 
 
 def get_ends(marks, target):
