@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from scipy import signal
 import scipy.signal
 import scipy.ndimage
+from joblib import Parallel, delayed
 
 def ToCuda(data_cpu):
     data = {}
@@ -40,6 +41,13 @@ def random_horizontal_flip(img, p=0.5):
     if random.random() > p:
         img = img[:, ::-1, :]
     return img
+
+def center_crop(self, t, crop_size):
+    t_width, t_height = t.shape[0], t.shape[1]
+    top = int((t_height - crop_size + 1) * 0.5)
+    left = int((t_width - crop_size + 1) * 0.5)
+
+    return t[top:top + crop_size, left:left + crop_size, ...]
     
 # Color conversion code
 def rgb2xyz(rgb): # rgb from [0,1]
@@ -178,12 +186,12 @@ def get_colorization_data(data_raw, opt, prev=None, ab_thresh=5., p=.125, marks=
         samp='l2'
 
     else:
-        data['prev'] = torch.zeros_like(data['ab'])
+        # data['prev'] = torch.zeros_like(data['ab'])
         N,C,H,W = data['ab'].shape
         data['clicks'] = torch.zeros([N, C+1, H, W])
         # data['clicks'] = torch.cat((torch.ones_like(data['gray'])- 0.5, data['ab']), dim=1)
-        data['marks'] = np.zeros(data_lab.shape[0])
-        samp='normal'
+        # data['marks'] = np.zeros(data_lab.shape[0])
+        # samp='normal'
         return data
     
     return add_color_patches_rand_gt(data, opt, prev, p=p, num_points=num_points, samp=samp)
@@ -332,7 +340,8 @@ def decode_mean(data_ab_quant, opt):
     return data_ab_inf
 
 def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
-    psnr = 0
+    # psnr = 0
+    psnr = []
     if lightness.ndim == 3:
         lightness = torch.unsqueeze(lightness, 0)
         real_ab = torch.unsqueeze(real_ab, 0)
@@ -346,12 +355,12 @@ def calc_batch_psnr(lightness, real_ab, fake_ab, opt, avg=True):
     fake_rgb[fake_rgb > 1] = 1.0
     for idx in range(lightness.shape[0]):
         mse = torch.mean( (fake_rgb[idx, :, :, :] - real_rgb[idx, :, :, :]) ** 2 )
-        psnr += 10 * torch.log10(1.0 / mse)  
+        psnr.append((10 * torch.log10(1.0 / mse)).cpu().numpy())
         
     if avg:
-        return (psnr / lightness.shape[0]).cpu().numpy()
+        return sum(psnr)/len(psnr)
     else:
-        return psnr.cpu().numpy()
+        return psnr
 
 
 def get_ends(marks, target):
@@ -375,5 +384,36 @@ def get_ends(marks, target):
 def argmax_l2(fake, real):
     l2_dist = torch.sum(torch.sum(torch.sum(torch.pow(real-fake, 2), dim=1), dim=1), dim=1)
     return torch.argmax(l2_dist).numpy()
+
+def _subcomp(frame, flow):
+    C,H,W = frame.shape
+    comp_frame = np.zeros([C+1, H, W])
+    comp_frame[0, :, :] = -0.5
+    for x in range(flow.shape[0]):
+        for y in range(flow.shape[1]):
+            new_x = x + flow[x, y, 0] # u
+            new_y = y + flow[x, y, 1] # v
+            if new_x > H-1:
+                new_x = H-1
+            if new_y > W-1:
+                new_y = W-1
+            comp_frame[1:, new_x, new_y] = frame[:, x, y]
+            comp_frame[0, new_x, new_y] = 0.5
+    return comp_frame
+    
+def motion_comp(frames, flows):
+    if type(frames) is not np.ndarray:
+        frames = frames.numpy()
+    if type(flows) is not np.ndarray:
+        flows = flows.numpy()
+        
+    with Parallel(n_jobs=6) as parallel:
+        output1 = parallel(delayed(_subcomp)(frames[i,:,:,:], flows[i,:,:,:]) for i in range(frames.shape[0]))
+    
+    return torch.from_numpy(np.stack(output1, axis=0))
+    
+    
+    
+    
     
     

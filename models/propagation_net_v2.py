@@ -13,7 +13,7 @@ import warnings
 import os
 from utils.utils import *
 import torch
-print('Interaction Network: initialising')
+print('Propagation Network: initialising')
 
 
 class Encoder(nn.Module):
@@ -46,12 +46,8 @@ class Encoder(nn.Module):
         self.res4 = resnet.layer3  # 1/16, 1024
         self.res5 = resnet.layer4  # 1/32, 2048
 
-    def forward(self, gray, clicks, prev):
-        m = self.conv1_prev(prev)
-        if self.opt.no_prev:
-            x = m.detach() + self.conv1_gray(gray) + self.conv1_clicks(clicks)
-        else:
-            x = m + self.conv1_gray(gray) + self.conv1_clicks(clicks)
+    def forward(self, gray, clicks):
+        x = self.conv1_gray(gray) + self.conv1_clicks(clicks)
         x = self.bn1(x)
         x = self.relu(x)     # 1/2, 64
         x = self.maxpool(x)  # 1/4, 64
@@ -148,10 +144,9 @@ class HuberLoss(nn.Module):
         return torch.mean(loss)
 
 
-class Inet(nn.Module):
+class Pnet(nn.Module):
     def __init__(self, opt):
         super(Inet, self).__init__()
-        # mdim = 228
         mdim = 256
         self.Encoder = Encoder(opt)      # inputs: ref: rf, rm / tar: tf, tm
         self.Decoder = Decoder(mdim, opt)  # input: m5, r4, r3, r2 >> p
@@ -160,11 +155,11 @@ class Inet(nn.Module):
         self.load_I = opt.load_I
         self.I_path = opt.I_path
 
-    def forward(self, gray, clicks, prev):
+    def forward(self, gray, clicks):
         #gray = torch.unsqueeze(gray, 0)
         #clicks = torch.unsqueeze(clicks, 0)
         #prev = torch.unsqueeze(prev, 0)
-        tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks, prev)
+        tr5, tr4, tr3, tr2 = self.Encoder(gray, clicks)
         fake_ab = self.Decoder(tr5, tr4, tr3, tr2)
 
         return fake_ab
@@ -178,7 +173,7 @@ class Inet(nn.Module):
         if self.load_I:
             # self.load_state_dict(torch.load(self.I_path, map_location='cuda:'+str(opt.gpu_ids)).state_dict())
             self.load_state_dict(torch.load(self.I_path))
-            print('[Interaction net] loading Inet sccesses')
+            print('[Propagation net] loading Pnet sccesses')
             
     def calc_loss(self, real, fake):
         self.fake = fake

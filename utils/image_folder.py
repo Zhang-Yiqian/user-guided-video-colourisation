@@ -22,11 +22,12 @@ import numpy as np
 from skimage.color import rgb2lab
 from skimage.io import imread
 from skimage.transform import resize
-from utils.utils import random_crop, random_horizontal_flip
+from utils.utils import center_crop, random_horizontal_flip
 from joblib import Parallel, delayed
 import torch
 import random
 import copy
+from pathlib import Path
 
 IMG_EXTENSIONS = [
     '.jpg', '.JPG', '.jpeg', '.JPEG',
@@ -64,7 +65,7 @@ class ImageFolder(data.Dataset):
     
         self.path = self.videos[index]
         try:
-            start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames)
+            start = np.random.randint(0, len(os.listdir(self.path)) - self.num_frames - 1)
         except:
             start = 0
         
@@ -73,15 +74,14 @@ class ImageFolder(data.Dataset):
         # l2 = copy.deepcopy(idx_list)
         # random.shuffle(l1)
         # random.shuffle(l2)
-        with Parallel(n_jobs=4) as parallel:
+        with Parallel(n_jobs=6) as parallel:
             output1 = parallel(delayed(self.index_loader)(i) for i in idx_list)
-        # with Parallel(n_jobs=6) as parallel:
-        #    output1 = parallel(delayed(self.index_loader)(i) for i in l1)
-        
-        # with Parallel(n_jobs=6) as parallel:
-        #     output2 = parallel(delayed(self.index_loader)(i) for i in l2)
-        return torch.stack(output1, axis=0)
-        # return torch.stack(output1, axis=0), torch.stack(output2, axis=0)
+        with Parallel(n_jobs=6) as parallel:
+            output2 = parallel(delayed(self.index_loader)(i+1) for i in idx_list)
+        with Parallel(n_jobs=6) as parallel:
+            output3 = parallel(delayed(self.flow_loader)(i) for i in idx_list)
+
+        return torch.stack(output1, axis=0), torch.stack(output2, axis=0), torch.stack(output3, axis=0)
         
     def __len__(self):
         return len(self.videos)
@@ -91,7 +91,18 @@ class ImageFolder(data.Dataset):
         
         return self.transform(Image.open(self.path+nfile).convert('RGB'))
     
+    def flow_loader(self, n):
+        nfile = "/%05d.fo" % n
+        path = Path(self.path+nfile)
+        with path.open(mode='r') as flo:
+            tag = np.fromfile(flo, np.float32, count=1)[0]
+            width = np.fromfile(flo, np.int32, count=1)[0]
+            height = np.fromfile(flo, np.int32, count=1)[0]
+            nbands = 2
+            tmp = np.fromfile(flo, np.float32, count= nbands * width * height)
+            flow = np.resize(tmp, (int(height), int(width), int(nbands)))
 
-
+        return torch.from_numpy(center_crop(flow, self.opt.fineSize))
+    
 
         
